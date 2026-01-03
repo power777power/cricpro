@@ -2,7 +2,7 @@
 <html lang="hi">
 <head>
     <meta charset="UTF-8">
-    <title>CricLedger Sateek Pro v28.0 | Settlement Master</title>
+    <title>CricLedger Sateek Pro v28.0 | Secure</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
@@ -24,12 +24,11 @@
       const db = getFirestore(app);
       const DB_DOC = doc(db, "master", "data");
 
-      // Cloud data handling
       window.dbState = JSON.parse(localStorage.getItem('CRICPRO_MASTER_DB')) || { teams: ["INDIA", "PAK", "AUS"], parties: [], matches: [], ledger: [] };
 
       window.saveToCloud = async () => {
           localStorage.setItem('CRICPRO_MASTER_DB', JSON.stringify(window.dbState));
-          try { await setDoc(DB_DOC, window.dbState); } catch(e) { console.log("Offline Mode"); }
+          try { await setDoc(DB_DOC, window.dbState); } catch(e) { console.log("Offline"); }
       };
 
       onSnapshot(DB_DOC, (doc) => {
@@ -59,23 +58,31 @@
         .minus { color: #ef4444; font-weight: 900; }
         tr:nth-child(even) { background-color: #0f172a; }
         .party-card { background: rgba(30, 41, 59, 0.5); border: 1px solid #334155; border-radius: 12px; padding: 8px 12px; margin-bottom: 6px; }
-        .meter-row { display: flex; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid #1e293b; font-size: 11px; }
         .session-box { background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 20px; padding: 12px; margin-bottom: 12px; }
         .modal-overlay { background: rgba(0,0,0,0.92); backdrop-filter: blur(10px); }
+        #login-screen { position: fixed; inset: 0; background: #020617; z-index: 9999; display: flex; align-items: center; justify-content: center; }
     </style>
 </head>
 <body class="flex h-screen overflow-hidden">
 
+    <div id="login-screen">
+        <div class="bg-[#0f172a] p-10 rounded-[40px] border-4 border-slate-800 text-center shadow-2xl">
+            <div class="text-3xl font-black text-blue-500 italic mb-6 uppercase">SECURITY <span class="text-white">CHECK</span></div>
+            <input type="password" id="pin-input" placeholder="ENTER PIN" class="w-full text-center text-2xl tracking-[10px] mb-6" maxlength="4">
+            <button onclick="checkPin()" class="w-full bg-blue-600 py-4 rounded-2xl font-black text-xl hover:bg-blue-500 transition-all">UNLOCK</button>
+            <div id="pin-error" class="mt-4 text-red-500 font-bold hidden text-xs uppercase">Wrong PIN! Try again.</div>
+        </div>
+    </div>
+
     <nav class="w-64 bg-[#020617] border-r border-slate-800 flex flex-col shrink-0">
         <div class="p-8 text-3xl font-black text-blue-500 italic tracking-tighter text-center">CRIC<span class="text-white">PRO</span></div>
         <div class="flex-1 space-y-2 px-4">
-            <button onclick="showTab('match-room')" id="btn-match-room" class="nav-btn active-nav w-full flex items-center p-4 rounded-xl hover:bg-slate-800 font-bold transition-all"><i class="fa fa-tv mr-4 text-blue-400"></i> Match Room</button>
+            <button onclick="showTab('match-room')" id="btn-match-room" class="nav-btn active-nav w-full flex items-center p-4 rounded-xl hover:bg-slate-800 font-bold"><i class="fa fa-tv mr-4 text-blue-400"></i> Match Room</button>
             <button onclick="showTab('match-summary')" id="btn-match-summary" class="nav-btn w-full flex items-center p-4 rounded-xl hover:bg-slate-800 font-bold"><i class="fa fa-chart-pie mr-4 text-yellow-500"></i> Summary</button>
             <button onclick="showTab('team-master')" id="btn-team-master" class="nav-btn w-full flex items-center p-4 rounded-xl hover:bg-slate-800 font-bold"><i class="fa fa-shield-halved mr-4 text-red-500"></i> Teams</button>
             <button onclick="showTab('party-master')" id="btn-party-master" class="nav-btn w-full flex items-center p-4 rounded-xl hover:bg-slate-800 font-bold"><i class="fa fa-users mr-4 text-orange-500"></i> Parties</button>
             <button onclick="showTab('ledger')" id="btn-ledger" class="nav-btn w-full flex items-center p-4 rounded-xl hover:bg-slate-800 font-bold"><i class="fa fa-book mr-4 text-green-500"></i> Ledger</button>
         </div>
-        <div class="p-4 text-[10px] text-slate-700 text-center font-bold">Cloud Live: cricledger.xyz</div>
     </nav>
 
     <div class="flex-1 flex flex-col">
@@ -118,94 +125,73 @@
             <div class="flex items-center space-x-4"><button onclick="exitMatch()" class="bg-slate-800 p-3 rounded-xl hover:bg-slate-700 transition-all"><i class="fa fa-arrow-left-long"></i></button><h2 id="active-match-name" class="text-2xl font-black italic text-blue-600 uppercase"></h2></div>
             <button onclick="openDeclareMatchModal()" class="bg-yellow-500 text-black px-8 py-2 rounded-xl font-black text-xs uppercase shadow-xl">Finalize Match</button>
         </div>
-        
         <div class="flex-1 flex flex-col space-y-4 overflow-hidden">
             <div class="flex space-x-4 shrink-0">
                 <div class="w-[50%] bg-[#0f172a] p-4 rounded-3xl border border-blue-900/40 shadow-2xl">
-                    <div class="grid grid-cols-5 gap-2"><input type="number" id="bet-rate" step="0.01" placeholder="Rate" class="text-center enter-nav" data-next="bet-amt"><input type="text" id="bet-amt" onkeyup="hS(this)" placeholder="Amt" class="text-center enter-nav" data-next="bet-mode"><select id="bet-mode" class="text-blue-400 enter-nav" data-next="bet-team"><option value="L">LAGAI</option><option value="K">KHAI</option></select><select id="bet-team" class="enter-nav" data-next="bet-party"></select><select id="bet-party" class="enter-nav" data-next="btn-save-bet"></select></div>
-                    <button id="btn-save-bet" onclick="postBet()" class="w-full bg-blue-600 mt-2 py-3 rounded-xl font-black text-sm transition-all active:scale-95">SAVE MATCH BET</button>
+                    <div class="grid grid-cols-5 gap-2"><input type="number" id="bet-rate" step="0.01" placeholder="Rate" class="text-center"><input type="text" id="bet-amt" onkeyup="hS(this)" placeholder="Amt" class="text-center"><select id="bet-mode" class="text-blue-400"><option value="L">LAGAI</option><option value="K">KHAI</option></select><select id="bet-team"></select><select id="bet-party"></select></div>
+                    <button onclick="postBet()" class="w-full bg-blue-600 mt-2 py-3 rounded-xl font-black text-sm">SAVE MATCH BET</button>
                 </div>
                 <div class="w-[50%] bg-[#0f172a] p-4 rounded-3xl border border-orange-900/40 shadow-2xl">
                     <div class="flex justify-between items-center mb-1"><div class="text-[10px] font-black text-orange-500 italic uppercase">Fast Session</div><div class="flex space-x-1"><input type="text" id="new-ses-name" placeholder="Name" class="text-[10px] p-1 w-24 bg-slate-900 border-none"><button onclick="addNewSessionType()" class="bg-slate-800 text-[10px] px-2 rounded font-black">+</button></div></div>
-                    <div class="grid grid-cols-5 gap-2"><select id="ses-type-list" class="text-xs enter-nav" data-next="ses-runs"></select><input type="number" id="ses-runs" placeholder="Runs" class="text-center enter-nav" data-next="ses-runs-amt"><input type="text" id="ses-runs-amt" onkeyup="hS(this)" placeholder="Amt" class="text-center enter-nav" data-next="ses-mode"><select id="ses-mode" class="enter-nav" data-next="ses-party"><option value="Y">YES</option><option value="N">NO</option></select><select id="ses-party-list" class="enter-nav" data-next="btn-save-ses"></select></div>
-                    <button id="btn-save-ses" onclick="postSession()" class="w-full bg-orange-600 mt-2 py-3 rounded-xl font-black text-sm transition-all active:scale-95">SAVE SESSION BET</button>
+                    <div class="grid grid-cols-5 gap-2"><select id="ses-type-list" class="text-xs"></select><input type="number" id="ses-runs" placeholder="Runs" class="text-center"><input type="text" id="ses-amt" onkeyup="hS(this)" placeholder="Amt" class="text-center"><select id="ses-mode"><option value="Y">YES</option><option value="N">NO</option></select><select id="ses-party-list"></select></div>
+                    <button onclick="postSession()" class="w-full bg-orange-600 mt-2 py-3 rounded-xl font-black text-sm">SAVE SESSION BET</button>
                 </div>
             </div>
-
             <div class="flex-1 flex space-x-4 overflow-hidden">
                 <div class="w-[30%] flex flex-col space-y-2">
-                    <div class="bg-black p-4 rounded-3xl border border-slate-800 flex justify-between shadow-2xl"><div class="text-center flex-1 border-r border-slate-800"><div id="side-t1" class="text-[9px] text-slate-500 font-black"></div><div id="val-t1" class="text-2xl font-black">0</div></div><div class="text-center flex-1"><div id="side-t2" class="text-[9px] text-slate-500 font-black"></div><div id="val-t2" class="text-2xl font-black">0</div></div></div>
+                    <div class="bg-black p-4 rounded-3xl border border-slate-800 flex justify-between shadow-2xl"><div class="flex-1 text-center border-r border-slate-800"><div id="side-t1" class="text-[8px] uppercase"></div><div id="val-t1" class="text-2xl font-black">0</div></div><div class="flex-1 text-center"><div id="side-t2" class="text-[8px] uppercase"></div><div id="val-t2" class="text-2xl font-black">0</div></div></div>
                     <div class="bg-[#0f172a] rounded-3xl border border-slate-800 flex-1 overflow-y-auto p-3" id="party-book-list"></div>
                 </div>
-                <div class="w-[45%] flex space-x-2 overflow-hidden bg-[#0f172a] border border-slate-800 rounded-3xl">
-                    <div class="w-1/2 overflow-y-auto border-r border-slate-800"><table class="w-full text-left text-[10px] font-bold"><tbody id="match-logs"></tbody></table></div>
-                    <div class="w-1/2 overflow-y-auto"><table class="w-full text-left text-[10px] font-bold"><tbody id="session-logs"></tbody></table></div>
-                </div>
+                <div class="w-[45%] flex space-x-2 bg-[#0f172a] rounded-3xl p-2 border border-slate-800 overflow-hidden"><div class="w-1/2 overflow-y-auto border-r border-slate-800"><table class="w-full text-left text-[10px] font-bold uppercase"><tbody id="match-logs"></tbody></table></div><div class="w-1/2 overflow-y-auto"><table class="w-full text-left text-[10px] font-bold uppercase"><tbody id="session-logs"></tbody></table></div></div>
                 <div class="w-[25%] bg-[#0f172a] border border-orange-900/40 rounded-3xl overflow-y-auto p-3 shadow-2xl" id="session-book-list"></div>
             </div>
         </div>
     </div>
 
     <div id="declare-modal" class="hidden fixed inset-0 z-[110] modal-overlay flex items-center justify-center p-6">
-        <div class="bg-[#0f172a] w-full max-w-3xl rounded-[50px] border-8 border-slate-800 p-12 shadow-2xl text-center">
-            <h3 class="text-4xl font-black uppercase italic text-blue-500 mb-10 tracking-tighter">Who won the match?</h3>
+        <div class="bg-[#0f172a] w-full max-w-3xl rounded-[50px] border-8 border-slate-800 p-12 text-center shadow-2xl">
+            <h3 class="text-4xl font-black uppercase italic text-blue-500 mb-10 tracking-tighter">Who won?</h3>
             <div class="grid grid-cols-3 gap-8 h-64">
-                <button onclick="finalizeMatchWithResult(window.curMatch.t1)" class="bg-blue-600 hover:bg-blue-500 rounded-[40px] flex flex-col items-center justify-center space-y-4 shadow-2xl transition-all active:scale-90">
-                    <i class="fa fa-trophy text-5xl text-white/50"></i>
-                    <span id="declare-btn-t1" class="text-2xl font-black uppercase tracking-widest text-white"></span>
-                </button>
-                <button onclick="finalizeMatchWithResult(window.curMatch.t2)" class="bg-blue-900 hover:bg-blue-800 rounded-[40px] flex flex-col items-center justify-center space-y-4 shadow-2xl transition-all active:scale-90">
-                    <i class="fa fa-trophy text-5xl text-white/50"></i>
-                    <span id="declare-btn-t2" class="text-2xl font-black uppercase tracking-widest text-white"></span>
-                </button>
-                <button onclick="finalizeMatchWithResult('ABANDONED')" class="bg-red-700 hover:bg-red-600 rounded-[40px] flex flex-col items-center justify-center space-y-4 shadow-2xl transition-all active:scale-90">
-                    <i class="fa fa-cloud-showers-heavy text-5xl text-white/50"></i>
-                    <span class="text-xl font-black uppercase tracking-widest text-white">MATCH<br>ABANDONED</span>
-                </button>
+                <button onclick="finalizeMatchWithResult(window.curMatch.t1)" class="bg-blue-600 hover:bg-blue-500 rounded-[40px] flex flex-col items-center justify-center shadow-2xl transition-all active:scale-90"><i class="fa fa-trophy text-5xl mb-4 text-white/50"></i><span id="declare-btn-t1" class="text-2xl font-black uppercase"></span></button>
+                <button onclick="finalizeMatchWithResult(window.curMatch.t2)" class="bg-blue-900 hover:bg-blue-800 rounded-[40px] flex flex-col items-center justify-center shadow-2xl transition-all active:scale-90"><i class="fa fa-trophy text-5xl mb-4 text-white/50"></i><span id="declare-btn-t2" class="text-2xl font-black uppercase"></span></button>
+                <button onclick="finalizeMatchWithResult('ABANDONED')" class="bg-red-700 hover:bg-red-600 rounded-[40px] flex flex-col items-center justify-center shadow-2xl transition-all active:scale-90"><i class="fa fa-cloud-showers-heavy text-5xl mb-4 text-white/50"></i><span class="text-xl font-black uppercase">RAIN</span></button>
             </div>
-            <button onclick="closeDeclareModal()" class="mt-12 text-slate-500 font-bold uppercase tracking-widest hover:text-white underline">Go back</button>
+            <button onclick="closeDeclareModal()" class="mt-12 text-slate-500 font-bold uppercase underline">Cancel</button>
         </div>
     </div>
 
     <script>
-        function hS(e) { let v = e.value.toLowerCase(); let num = parseFloat(v) || 1; if(v.endsWith('h')) e.value = num * 1000; else if(v.endsWith('t')) e.value = num * 10000; else if(v.endsWith('p')) e.value = num * 100000; }
+        // SECURITY PIN SETTING
+        const CORRECT_PIN = "6675"; // Your New PIN
         
-        window.refreshAll = () => { renTeams(); renParties(); renMatches(); renSummary(); renLedNav(); }
-
-        function showTab(id) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active-nav'));
-            document.getElementById(id).classList.add('active');
-            document.getElementById('btn-' + id).classList.add('active-nav');
-            window.refreshAll();
+        function checkPin() {
+            const input = document.getElementById('pin-input').value;
+            if(input === CORRECT_PIN) {
+                document.getElementById('login-screen').style.display = 'none';
+                window.refreshAll();
+            } else {
+                document.getElementById('pin-error').classList.remove('hidden');
+                document.getElementById('pin-input').value = "";
+            }
         }
 
+        function hS(e) { let v = e.value.toLowerCase(); let num = parseFloat(v) || 1; if(v.endsWith('h')) e.value = num * 1000; else if(v.endsWith('t')) e.value = num * 10000; else if(v.endsWith('p')) e.value = num * 100000; }
+        window.refreshAll = () => { renTeams(); renParties(); renMatches(); renSummary(); renLedNav(); }
+        function showTab(id) { document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active')); document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active-nav')); document.getElementById(id).classList.add('active'); document.getElementById('btn-' + id).classList.add('active-nav'); window.refreshAll(); }
         function saveTeam() { let n = document.getElementById('team-input').value.toUpperCase().trim(); if(n) window.dbState.teams.push(n); window.saveToCloud(); document.getElementById('team-input').value=''; }
         function renTeams() { document.getElementById('team-grid').innerHTML = window.dbState.teams.sort().map(t => `<div class="bg-[#0f172a] p-4 rounded-xl border border-slate-800 font-bold text-center text-xs uppercase text-slate-500">${t}</div>`).join(''); renSels(); }
         function renSels() { let h = window.dbState.teams.sort().map(t => `<option value="${t}">${t}</option>`).join(''); document.getElementById('sel-t1').innerHTML = h; document.getElementById('sel-t2').innerHTML = h; }
-
-        function saveParty() {
-            let n = document.getElementById('party-name').value.toUpperCase().trim(); if(!n) return;
-            window.dbState.parties.push({ name: n, comm: parseFloat(document.getElementById('party-comm').value)||0, commMethod: document.getElementById('party-comm-method').value, commType: document.getElementById('party-comm-type').value, shr: parseFloat(document.getElementById('party-shr').value)||0 });
-            window.saveToCloud(); document.getElementById('party-name').focus();
-        }
-        function renParties() { document.getElementById('party-table-body').innerHTML = window.dbState.parties.map((p,i) => `<tr class="border-b border-slate-800"> <td class="p-4 uppercase text-xs font-black">${p.name}</td> <td class="p-4 text-orange-500 text-center text-xs font-bold">${p.comm}% ${p.commMethod}</td> <td class="p-4 text-right"></td></tr>`).join(''); }
-
-        function startMatch() {
-            let t1 = document.getElementById('sel-t1').value, t2 = document.getElementById('sel-t2').value;
-            if(t1===t2) return alert("Select Different Teams!");
-            window.dbState.matches.push({ id: Date.now(), t1, t2, status: 'LIVE', bets: [], sessions: [], sessionTypes: [], date: new Date().toLocaleDateString(), sessionResults: {} });
-            window.saveToCloud();
-        }
-        function renMatches() {
-            document.getElementById('match-grid').innerHTML = window.dbState.matches.filter(m => m.status === 'LIVE').map(m => `<div onclick="openM(${m.id})" class="bg-[#0f172a] p-10 rounded-[40px] border border-slate-800 cursor-pointer text-center font-black uppercase text-lg italic shadow-2xl hover:border-blue-600 transition-all">${m.t1} vs ${m.t2}</div>`).join('');
-        }
+        function saveParty() { let n = document.getElementById('party-name').value.toUpperCase().trim(); if(!n) return; window.dbState.parties.push({ name: n, comm: parseFloat(document.getElementById('party-comm').value)||0, commMethod: document.getElementById('party-comm-method').value, commType: document.getElementById('party-comm-type').value, shr: parseFloat(document.getElementById('party-shr').value)||0 }); window.saveToCloud(); document.getElementById('party-name').value=''; }
+        function renParties() { document.getElementById('party-table-body').innerHTML = window.dbState.parties.map(p => `<tr class="border-b border-slate-800"><td class="p-4 uppercase text-xs font-black text-blue-400">${p.name}</td><td class="p-4 text-orange-500 text-center font-bold">${p.comm}% ${p.commMethod}</td></tr>`).join(''); }
+        function startMatch() { let t1 = document.getElementById('sel-t1').value, t2 = document.getElementById('sel-t2').value; if(t1===t2) return alert("Select Different Teams!"); window.dbState.matches.push({ id: Date.now(), t1, t2, status: 'LIVE', bets: [], sessions: [], sessionTypes: ["6 OVER", "10 OVER", "20 OVER"], date: new Date().toLocaleDateString(), sessionResults: {} }); window.saveToCloud(); }
+        function renMatches() { document.getElementById('match-grid').innerHTML = window.dbState.matches.filter(m => m.status === 'LIVE').map(m => `<div onclick="openM(${m.id})" class="bg-[#0f172a] p-10 rounded-[40px] border border-slate-800 cursor-pointer text-center font-black uppercase text-lg italic shadow-2xl hover:border-blue-600 transition-all">${m.t1} vs ${m.t2}</div>`).join(''); }
 
         window.curMatch = null;
         function openM(id) {
             window.curMatch = window.dbState.matches.find(m => m.id === id);
             document.getElementById('inner-screen').classList.remove('hidden');
             document.getElementById('active-match-name').innerText = `${window.curMatch.t1} VS ${window.curMatch.t2}`;
+            document.getElementById('declare-btn-t1').innerText = window.curMatch.t1; document.getElementById('declare-btn-t2').innerText = window.curMatch.t2;
             document.getElementById('side-t1').innerText = window.curMatch.t1; document.getElementById('side-t2').innerText = window.curMatch.t2;
             document.getElementById('bet-team').innerHTML = `<option value="${window.curMatch.t1}">${window.curMatch.t1}</option><option value="${window.curMatch.t2}">${window.curMatch.t2}</option>`;
             let pOpt = window.dbState.parties.map(p => `<option value="${p.name}">${p.name}</option>`).sort().join('');
@@ -213,30 +199,12 @@
             renSesTypes(); renAllLogs();
         }
         function exitMatch() { document.getElementById('inner-screen').classList.add('hidden'); window.curMatch = null; }
-
         function addNewSessionType() { let val = document.getElementById('new-ses-name').value.trim(); if(val) { window.curMatch.sessionTypes.push(val); window.saveToCloud(); renSesTypes(); document.getElementById('new-ses-name').value=''; } }
         function renSesTypes() { document.getElementById('ses-type-list').innerHTML = window.curMatch.sessionTypes.map(s => `<option value="${s}">${s}</option>`).join(''); }
-
-        function postBet() {
-            let r = parseFloat(document.getElementById('bet-rate').value), a = parseFloat(document.getElementById('bet-amt').value);
-            if(!r || !a) return;
-            window.curMatch.bets.push({ team: document.getElementById('bet-team').value, rate: r, amt: a, type: document.getElementById('bet-mode').value, party: document.getElementById('bet-party').value, ts: new Date().toLocaleTimeString('en-GB') });
-            window.saveToCloud(); document.getElementById('bet-amt').value = ''; document.getElementById('bet-rate').focus();
-        }
-        function postSession() {
-            let n = document.getElementById('ses-type-list').value, r = parseInt(document.getElementById('ses-runs').value), a = parseFloat(document.getElementById('ses-runs-amt').value);
-            if(!n || !r || !a) return;
-            window.curMatch.sessions.push({ name: n, runs: r, amt: a, type: document.getElementById('ses-mode').value, party: document.getElementById('ses-party-list').value, ts: new Date().toLocaleTimeString('en-GB') });
-            window.saveToCloud(); document.getElementById('ses-runs-amt').value = ''; document.getElementById('ses-runs').focus();
-        }
-
-        function openDeclareMatchModal() {
-            document.getElementById('declare-modal').classList.remove('hidden');
-            document.getElementById('declare-btn-t1').innerText = window.curMatch.t1;
-            document.getElementById('declare-btn-t2').innerText = window.curMatch.t2;
-        }
+        function postBet() { let r = parseFloat(document.getElementById('bet-rate').value), a = parseFloat(document.getElementById('bet-amt').value); if(!r || !a) return; window.curMatch.bets.push({ team: document.getElementById('bet-team').value, rate: r, amt: a, type: document.getElementById('bet-mode').value, party: document.getElementById('bet-party').value, ts: new Date().toLocaleTimeString('en-GB') }); window.saveToCloud(); document.getElementById('bet-amt').value = ''; }
+        function postSession() { let n = document.getElementById('ses-type-list').value, r = parseInt(document.getElementById('ses-runs').value), a = parseFloat(document.getElementById('ses-amt').value); if(!n || !r || !a) return; window.curMatch.sessions.push({ name: n, runs: r, amt: a, type: document.getElementById('ses-mode').value, party: document.getElementById('ses-party-list').value, ts: new Date().toLocaleTimeString('en-GB') }); window.saveToCloud(); document.getElementById('ses-amt').value = ''; }
+        function openDeclareMatchModal() { document.getElementById('declare-modal').classList.remove('hidden'); }
         function closeDeclareModal() { document.getElementById('declare-modal').classList.add('hidden'); }
-
         function finalizeMatchWithResult(winTeam) {
             let pS = {}; let matchDetails = [];
             if(winTeam !== 'ABANDONED') {
@@ -275,9 +243,7 @@
             window.curMatch.summary = { winner: winTeam, parties: matchDetails, total: totalProfit };
             window.saveToCloud(); closeDeclareModal(); exitMatch(); showTab('match-summary');
         }
-
         function declareSession(sn) { let res = prompt(`Final Runs for ${sn}?`); if(res) { window.curMatch.sessionResults[sn] = parseInt(res); window.saveToCloud(); renAllLogs(); } }
-
         function renAllLogs() {
             let t1_bookie = 0, t2_bookie = 0, pB_raw = {}, sB = {}, mHtml = "", sHtml = "";
             window.curMatch.bets.forEach((b, i) => {
@@ -286,34 +252,23 @@
                 else { if(b.team === window.curMatch.t1) { t1_i = win; t2_i = -loss; } else { t2_i = win; t1_i = -loss; } }
                 t1_bookie += t1_i; t2_bookie += t2_i;
                 if(!pB_raw[b.party]) pB_raw[b.party] = {t1:0, t2:0}; pB_raw[b.party].t1 += t1_i; pB_raw[b.party].t2 += t2_i;
-                mHtml += `<tr class="border-b border-slate-800 text-blue-400"><td>${b.team} ${b.type}</td><td>${b.rate}</td><td>${b.amt}</td><td class="uppercase text-[8px]">${b.party}</td></tr>`;
+                mHtml += `<tr class="border-b border-slate-800 text-blue-400"><td>${b.team} ${b.type}</td><td>${b.rate}</td><td>${b.amt}</td><td>${b.party}</td></tr>`;
             });
             window.curMatch.sessions.forEach((s, i) => {
                 if(!sB[s.name]) sB[s.name] = { bets: [] }; sB[s.name].bets.push(s);
-                sHtml += `<tr class="border-b border-slate-800 text-orange-400"><td>${s.name} ${s.type}</td><td>${s.runs}</td><td>${s.amt}</td><td class="uppercase text-[8px]">${s.party}</td></tr>`;
+                sHtml += `<tr class="border-b border-slate-800 text-orange-400"><td>${s.name} ${s.type}</td><td>${s.runs}</td><td>${s.amt}</td><td>${s.party}</td></tr>`;
             });
             document.getElementById('match-logs').innerHTML = mHtml; document.getElementById('session-logs').innerHTML = sHtml;
             document.getElementById('val-t1').innerText = Math.round(t1_bookie); document.getElementById('val-t2').innerText = Math.round(t2_bookie);
-            document.getElementById('party-book-list').innerHTML = Object.keys(pB_raw).map(p => `<div class="party-card"><div class="text-[10px] font-black uppercase text-slate-300 border-b border-slate-700 pb-1 mb-1 italic">${p}</div><div class="flex justify-between text-[13px] font-bold"><span class="${pB_raw[p].t1>=0?'plus':'minus'}">T1: ${Math.round(pB_raw[p].t1)}</span><span class="${pB_raw[p].t2>=0?'plus':'minus'}">T2: ${Math.round(pB_raw[p].t2)}</span></div></div>`).join('');
+            document.getElementById('party-book-list').innerHTML = Object.keys(pB_raw).map(p => `<div class="party-card"><div class="text-[10px] font-black uppercase text-slate-300 border-b border-slate-700 pb-1 mb-1 italic tracking-widest">${p}</div><div class="flex justify-between text-[13px] font-bold"><span class="${pB_raw[p].t1>=0?'plus':'minus'}">T1: ${Math.round(pB_raw[p].t1)}</span><span class="${pB_raw[p].t2>=0?'plus':'minus'}">T2: ${Math.round(pB_raw[p].t2)}</span></div></div>`).join('');
             document.getElementById('session-book-list').innerHTML = Object.keys(sB).map(sn => {
                 let isD = window.curMatch.sessionResults[sn] !== undefined;
                 return `<div class="session-box"><div class="flex justify-between items-center mb-1"><span class="text-orange-400 text-[10px] font-black italic uppercase">${sn}</span>${isD ? `<span class="text-green-500 font-bold">R: ${window.curMatch.sessionResults[sn]}</span>` : `<button onclick="declareSession('${sn}')" class="bg-orange-600 text-[8px] px-2 py-1 rounded text-white font-black">Settle</button>`}</div></div>`;
             }).join('');
         }
-
-        function renSummary() {
-            document.getElementById('summary-container').innerHTML = window.dbState.matches.filter(m => m.status === 'DONE').reverse().map(m => `
-                <div class="p-6 bg-[#0f172a] rounded-3xl border border-slate-800">
-                    <div class="flex justify-between border-b border-slate-800 pb-3 mb-3 font-black text-blue-500 uppercase italic"><span>${m.t1} vs ${m.t2}</span><span class="text-[10px] text-slate-500">${m.date}</span></div>
-                    <div class="flex justify-between font-bold mb-4"><span>Winner: <span class="text-white">${m.summary.winner}</span></span><span class="${m.summary.total>=0?'plus':'minus'}">NET: ${Math.round(m.summary.total)}</span></div>
-                    <div class="space-y-1">${m.summary.parties.map(p => `<div class="flex justify-between text-[11px] font-bold text-slate-400 uppercase"><span>${p.name}</span><span class="${p.net>=0?'plus':'minus'}">${Math.round(p.net)}</span></div>`).join('')}</div>
-                </div>`).join('') || `<div class="col-span-2 text-center text-slate-600 py-20 font-black">NO MATCHES</div>`;
-        }
-
-        function renLedNav() { document.getElementById('ledger-nav').innerHTML = window.dbState.parties.map(p => `<button onclick="viewLed('${p.name}')" class="w-full text-left p-4 rounded-xl border border-slate-800 uppercase font-black text-[10px] mb-3 hover:bg-slate-800 transition-all tracking-widest">${p.name}</button>`).join(''); }
-        function viewLed(pn) { let bal = 0; document.getElementById('ledger-body').innerHTML = `<h2 class="text-3xl font-black mb-8 uppercase text-blue-500 italic">Report: ${pn}</h2><table class="w-full text-left font-bold uppercase text-[11px] tracking-wide">` + window.dbState.ledger.filter(l => l.party === pn).map(l => { bal += (l.type==='CR'?l.amt:-l.amt); return `<tr class="border-b border-slate-800/50"> <td class="p-4">${l.desc}</td> <td class="p-4 text-right minus">${l.type==='DR'?l.amt:''}</td> <td class="p-4 text-right plus">${l.type==='CR'?l.amt:''}</td> <td class="p-4 text-right font-black ${bal>=0?'plus':'minus'}">${Math.round(bal)}</td></tr>`; }).join('') + `</table>`; }
-
-        window.refreshAll();
+        function renSummary() { document.getElementById('summary-container').innerHTML = window.dbState.matches.filter(m => m.status === 'DONE').reverse().map(m => `<div class="p-6 bg-[#0f172a] rounded-3xl border border-slate-800"><div class="flex justify-between border-b border-slate-800 pb-3 mb-3 font-black text-blue-500 italic uppercase"><span>${m.t1} vs ${m.t2}</span><span class="text-[10px] text-slate-500">${m.date}</span></div><div class="flex justify-between font-bold mb-4"><span>Winner: <span class="text-white">${m.summary.winner}</span></span><span class="${m.summary.total>=0?'plus':'minus'}">NET: ${Math.round(m.summary.total)}</span></div><div class="space-y-1">${m.summary.parties.map(p => `<div class="flex justify-between text-[11px] font-bold text-slate-400 uppercase"><span>${p.name}</span><span class="${p.net>=0?'plus':'minus'}">${Math.round(p.net)}</span></div>`).join('')}</div></div>`).join('') || `<div class="col-span-2 text-center text-slate-600 py-20 font-black italic opacity-20">NO DATA</div>`; }
+        function renLedNav() { document.getElementById('ledger-nav').innerHTML = window.dbState.parties.sort((a,b)=>a.name.localeCompare(b.name)).map(p => `<button onclick="viewLed('${p.name}')" class="w-full text-left p-4 rounded-xl border border-slate-800 uppercase font-black text-[11px] mb-3 hover:bg-slate-800 tracking-widest">${p.name}</button>`).join(''); }
+        function viewLed(pn) { let bal = 0; document.getElementById('ledger-body').innerHTML = `<h2 class="text-3xl font-black mb-8 uppercase text-blue-500 italic">Report: ${pn}</h2><table class="w-full text-left font-bold uppercase text-[11px]">` + window.dbState.ledger.filter(l => l.party === pn).map(l => { bal += (l.type==='CR'?l.amt:-l.amt); return `<tr class="border-b border-slate-800/50"><td class="p-4 text-slate-300">${l.desc}</td><td class="p-4 text-right minus">${l.type==='DR'?l.amt:''}</td><td class="p-4 text-right plus">${l.type==='CR'?l.amt:''}</td><td class="p-4 text-right font-black italic ${bal>=0?'plus':'minus'}">${Math.round(bal)}</td></tr>`; }).join('') + `</table>`; }
     </script>
 </body>
 </html>
