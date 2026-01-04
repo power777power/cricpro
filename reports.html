@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <title>CricLedger | REPORT MASTER v3.1 (Split Left-Right)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      const firebaseConfig = { apiKey: "AIzaSyDbbV6yRFMgwceFvVeSNXg90NOZGfwGswQ", authDomain: "cricledger.firebaseapp.com", projectId: "cricledger", storageBucket: "cricledger.firebasestorage.app", messagingSenderId: "181787586646", appId: "1:181787586646:web:2be72001e1610eaf354bf7" };
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      const DB_DOC = doc(db, "master", "data");
+
+      window.dbState = JSON.parse(localStorage.getItem('CRICPRO_MASTER_DB')) || { teams: [], parties: [], matches: [] };
+      window.saveToCloud = async () => { localStorage.setItem('CRICPRO_MASTER_DB', JSON.stringify(window.dbState)); await setDoc(DB_DOC, window.dbState); };
+      
+      onSnapshot(DB_DOC, (doc) => { if (doc.exists()) { window.dbState = doc.data(); } });
+    </script>
+    <style>
+        body { background: #0f172a; color: #334155; font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        
+        .nav-bar { height: 65px; background: #1e293b; border-bottom: 4px solid #334151; display: flex; align-items: center; padding: 0 15px; gap: 10px; flex-shrink: 0; box-shadow: 0 4px 8px rgba(0,0,0,0.3); z-index: 50; }
+        .glass-panel { background: white; border-radius: 6px; height: 100%; display: flex; flex-direction: column; border: 1px solid #94a3b8; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        
+        /* --- OPTIMIZED TABLE STYLES --- */
+        .excel-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .excel-table th { 
+            background: #1e293b; color: #facc15; padding: 10px 2px; 
+            text-transform: uppercase; font-weight: 900; letter-spacing: 0.5px;
+            position: sticky; top: 0; z-index: 10; border-right: 1px solid #334155;
+        }
+        .excel-table td { 
+            border: 1px solid #cbd5e1; padding: 6px 2px; 
+            font-weight: 800; text-align: center; color: #0f172a; 
+            white-space: nowrap; 
+        }
+        .excel-row:nth-child(even) { background: #f8fafc; } 
+        .excel-row:hover { background: #e2e8f0; }
+        
+        /* --- COLORS --- */
+        .txt-win { color: #15803d; } 
+        .txt-loss { color: #b91c1c; } 
+        .neon-win { color: #4ade80 !important; } 
+        .neon-loss { color: #f87171 !important; }
+
+        .row-tallied { background: #f0fdf4 !important; } 
+        .row-tallied td { color: #15803d !important; opacity: 0.5; }
+        
+        .click-cell { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 4px; transition: 0.2s; }
+        .click-cell:hover { background-color: #fef08a !important; color: #000 !important; }
+
+        .input-box { background: #0f172a; border: 1px solid #475569; color: white; height: 35px; border-radius: 4px; padding: 0 10px; font-weight: bold; width: 280px; outline: none; font-size: 13px; }
+        .btn-view { background: linear-gradient(to bottom, #3b82f6, #1d4ed8); color: white; border: 1px solid #1e40af; padding: 8px 15px; border-radius: 4px; font-weight: 900; text-transform: uppercase; font-size: 11px; cursor: pointer; }
+        
+        /* --- SPLIT VIEW STYLES --- */
+        .mini-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .mini-table td { padding: 4px 8px; border-bottom: 1px solid rgba(0,0,0,0.05); }
+        .amt-big { font-family: 'Consolas', monospace; font-weight: 900; letter-spacing: 0.5px; font-size: 13px; }
+
+        /* --- AUDIT POPUP --- */
+        #audit-modal { z-index: 9999; }
+        .audit-row-lagai { background: #eff6ff; color: #1e3a8a; } 
+        .audit-row-khai { background: #fff1f2; color: #881337; } 
+        .audit-row-checked { background: #dcfce7 !important; color: #166534 !important; opacity: 0.5; text-decoration: line-through; }
+        .group-header { background: #e2e8f0; color: #334155; font-weight: 900; text-align: left; padding: 6px 10px; border-top: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8; font-size: 11px; }
+        
+        /* FOOTER */
+        .table-footer td { background: #0f172a; color: #fbbf24; font-weight: 900; border-top: 3px solid #facc15; font-size: 12px; padding: 10px 4px; }
+        
+        /* SCROLLBAR */
+        ::-webkit-scrollbar { width: 6px; height: 6px; } 
+        ::-webkit-scrollbar-track { background: #e2e8f0; } 
+        ::-webkit-scrollbar-thumb { background: #64748b; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <div id="audit-modal" class="hidden fixed inset-0 bg-black/90 flex items-center justify-center backdrop-blur-sm p-4">
+        <div class="bg-white w-full max-w-4xl h-[85vh] rounded-lg flex flex-col overflow-hidden shadow-2xl border-4 border-slate-700">
+            <div class="bg-slate-800 p-3 flex justify-between items-center text-white border-b border-slate-600">
+                <div><div class="text-[9px] text-slate-400 font-bold uppercase tracking-widest">AUDIT REPORT</div><div class="text-2xl font-black text-yellow-400 uppercase leading-none" id="audit-title">---</div></div>
+                <div class="text-right"><div class="text-[9px] text-slate-400 font-bold uppercase tracking-widest" id="audit-type">---</div><button onclick="closeAudit()" class="text-slate-300 hover:text-white text-2xl font-bold ml-4"><i class="fas fa-times"></i></button></div>
+            </div>
+            <div class="flex-1 overflow-auto bg-white p-0">
+                <table class="w-full text-center border-collapse">
+                    <thead class="bg-slate-700 text-white text-[11px] uppercase sticky top-0 z-20 shadow-md">
+                        <tr><th class="p-3">CHK</th><th class="p-3">TIME</th><th class="p-3">RATE / RUNS</th><th class="p-3">MODE</th><th class="p-3">AMOUNT</th><th class="p-3">PROFIT/LOSS</th></tr>
+                    </thead>
+                    <tbody id="audit-body" class="text-[13px] font-black"></tbody>
+                </table>
+            </div>
+            <div class="bg-slate-900 text-white p-3 flex justify-between items-center border-t-4 border-yellow-500">
+                <span class="font-bold uppercase tracking-widest text-xs text-slate-400">TOTAL NET P/L (AUDIT):</span>
+                <span id="audit-grand-total" class="text-2xl font-black text-yellow-400">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="nav-bar">
+        <div class="text-xl font-black italic text-white mr-6">REPORT<span class="text-yellow-400">PRO</span></div>
+        <div class="flex flex-col"><label class="text-[8px] text-slate-400 font-bold uppercase mb-0.5">SELECT DECLARED MATCH</label><select id="hist-match-sel" class="input-box" onchange="renderMatchReport()"></select></div>
+        <div class="flex-1 text-right mr-6"><div class="text-[8px] text-slate-400 font-bold uppercase">WINNER</div><div id="m-winner-display" class="text-2xl font-black text-yellow-400 uppercase tracking-widest">---</div></div>
+        <button onclick="toggleView()" id="btn-toggle" class="btn-view"><i class="fas fa-columns mr-2"></i> SPLIT VIEW</button>
+    </div>
+
+    <div class="flex-1 p-3 bg-slate-300 overflow-hidden">
+        <div class="glass-panel">
+            
+            <div id="view-table" class="flex-1 overflow-auto flex flex-col relative">
+                <div class="flex-1 overflow-auto">
+                    <table class="excel-table">
+                        <thead>
+                            <tr>
+                                <th style="width:30px;">#</th><th class="text-left pl-3" style="width:140px;">PARTY NAME</th>
+                                <th>MATCH P/L</th><th>SESS P/L</th><th class="bg-slate-700 text-slate-300">ROW TOTAL</th>
+                                <th>M.COMM</th><th>S.COMM</th><th class="bg-blue-50 text-blue-900">TOT.COMM</th>
+                                <th class="bg-slate-800 text-white">NET TODAY</th><th class="bg-yellow-50 text-slate-700 border-l border-slate-300">OLD BAL</th>
+                                <th class="bg-black text-white">GRAND TOTAL</th><th class="bg-white text-slate-900">OK</th>
+                            </tr>
+                        </thead>
+                        <tbody id="match-body"><tr><td colspan="12" class="p-20 text-center text-slate-400 font-bold text-lg">Loading...</td></tr></tbody>
+                        <tfoot class="table-footer sticky bottom-0 z-20 shadow-[0_-5px_10px_rgba(0,0,0,0.2)]">
+                            <tr>
+                                <td colspan="2" class="text-right pr-4 text-slate-400">TOTAL:</td>
+                                <td id="tf-match">0</td><td id="tf-sess">0</td><td id="tf-row">0</td>
+                                <td id="tf-mcomm" class="text-slate-500">0</td><td id="tf-scomm" class="text-slate-500">0</td><td id="tf-tcomm" class="text-blue-300">0</td>
+                                <td id="tf-net" class="text-[14px]">0</td><td id="tf-old" class="text-slate-400">0</td><td id="tf-grand" class="text-[15px]">0</td><td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div id="view-split" class="hidden flex-1 overflow-hidden flex flex-col p-2 bg-slate-100">
+                <div class="split-wrapper flex-1 overflow-hidden flex flex-row gap-4"> <div class="split-card flex-1 flex flex-col h-full border-t-4 border-green-600 shadow-sm rounded overflow-hidden">
+                        <div class="card-head bg-green-700 text-white flex justify-between p-2 font-black text-sm uppercase"><span><i class="fas fa-arrow-down mr-2"></i> LENA HAI (RECEIVABLE)</span><span id="count-plus" class="bg-black/20 px-2 rounded text-[10px]">0</span></div>
+                        <div class="flex-1 overflow-auto bg-white"><table class="mini-table" id="table-plus"></table></div>
+                        <div class="p-3 bg-green-100 border-t border-green-300 text-green-900 font-black text-right text-xl">TOTAL: <span id="total-plus">0</span></div>
+                    </div>
+
+                    <div class="split-card flex-1 flex flex-col h-full border-t-4 border-red-600 shadow-sm rounded overflow-hidden">
+                        <div class="card-head bg-red-700 text-white flex justify-between p-2 font-black text-sm uppercase"><span><i class="fas fa-arrow-up mr-2"></i> DENA HAI (PAYABLE)</span><span id="count-minus" class="bg-black/20 px-2 rounded text-[10px]">0</span></div>
+                        <div class="flex-1 overflow-auto bg-white"><table class="mini-table" id="table-minus"></table></div>
+                        <div class="p-3 bg-red-100 border-t border-red-300 text-red-900 font-black text-right text-xl">TOTAL: <span id="total-minus">0</span></div>
+                    </div>
+
+                </div>
+                <div class="bg-slate-900 p-3 text-white flex justify-between items-center rounded mt-2 shadow-lg flex-shrink-0">
+                    <div class="text-xs text-slate-400 font-bold uppercase tracking-widest pl-2">TODAY'S NET CASH</div><div class="text-3xl font-black text-yellow-400 pr-2" id="split-grand">0</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const formatIN = (num) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(num);
+        let currentReportData = [], talliedState = {}, activeMatch = null;
+
+        function init() {
+            setTimeout(() => {
+                const matches = window.dbState.matches.filter(m => m.status === 'DECLARED').sort((a,b) => b.id - a.id);
+                const mSel = document.getElementById('hist-match-sel');
+                if(matches.length > 0) { mSel.innerHTML = matches.map(m => `<option value="${m.id}">${m.t1} vs ${m.t2} (${m.date || 'No Date'})</option>`).join(''); renderMatchReport(); } 
+                else { mSel.innerHTML = '<option>NO HISTORY FOUND</option>'; document.getElementById('match-body').innerHTML = '<tr><td colspan="12" class="p-10 text-center">No Data</td></tr>'; }
+            }, 1000);
+        }
+        init();
+
+        window.renderMatchReport = () => {
+            const id = parseInt(document.getElementById('hist-match-sel').value);
+            activeMatch = window.dbState.matches.find(x => x.id === id);
+            if(!activeMatch) return;
+            document.getElementById('m-winner-display').innerText = activeMatch.winner || 'UNKNOWN';
+            const winner = activeMatch.winner;
+            currentReportData = [];
+            let pMap = {};
+            const allBets = [...(activeMatch.bets||[]), ...(activeMatch.sessions||[])];
+            const activeParties = [...new Set(allBets.map(b => b.party))].sort();
+            activeParties.forEach(pName => { pMap[pName] = { name: pName, matchPL: 0, sessPL: 0, matchComm: 0, sessComm: 0 }; });
+
+            if(activeMatch.bets) { activeMatch.bets.forEach(b => { if(!pMap[b.party]) return; let win=b.amt*b.rate, loss=parseFloat(b.amt), raw=0; if(winner==="DRAW") raw=0; else if(b.mode==='L') raw=(b.team===winner)?win:-loss; else raw=(b.team!==winner)?loss:-win; pMap[b.party].matchPL+=raw; let p=window.dbState.parties.find(x=>x.name===b.party)||{}; let commPct=parseFloat(b.comm||p.comm||0); pMap[b.party].matchComm+=b.amt*(commPct/100); }); }
+            if(activeMatch.sessions) { const dec=activeMatch.declaredSessions||{}; activeMatch.sessions.forEach(s => { if(pMap[s.party] && dec[s.name]!==undefined) { let res=dec[s.name], win=s.amt*s.rate, loss=parseFloat(s.amt), raw=0; if(s.mode==='Y') raw=(res>=s.runs)?win:-loss; else raw=(res<s.runs)?loss:-win; pMap[s.party].sessPL+=raw; let p=window.dbState.parties.find(x=>x.name===s.party)||{}; let sCommPct=parseFloat(s.sComm||p.sComm||0); pMap[s.party].sessComm+=s.amt*(sCommPct/100); } }); }
+
+            for(let key in pMap) {
+                let d = pMap[key];
+                d.rowTotal = d.matchPL + d.sessPL;
+                d.totalComm = d.matchComm + d.sessComm;
+                d.netToday = (d.rowTotal + d.totalComm); 
+                let p = window.dbState.parties.find(x => x.name === d.name) || {balance:0};
+                d.oldBal = parseFloat(p.balance) || 0;
+                d.grandTotal = d.oldBal + d.netToday;
+                currentReportData.push(d);
+            }
+            renderMainTable();
+        };
+
+        window.toggleTallied = (name) => { talliedState[name] = !talliedState[name]; renderMainTable(); };
+
+        function renderMainTable() {
+            currentReportData.sort((a,b) => { let tA=talliedState[a.name]||false, tB=talliedState[b.name]||false; if(tA===tB) return a.name.localeCompare(b.name); return tA-tB; });
+            let html='', idx=1;
+            let sMatch=0, sSess=0, sRow=0, sMComm=0, sSComm=0, sTComm=0, sNet=0, sOld=0, sGrand=0;
+
+            currentReportData.forEach((d) => {
+                let isT = talliedState[d.name];
+                sMatch+=d.matchPL; sSess+=d.sessPL; sRow+=d.rowTotal; sMComm+=d.matchComm; sSComm+=d.sessComm; sTComm+=d.totalComm; sNet+=d.netToday; sOld+=d.oldBal; sGrand+=d.grandTotal;
+
+                html += `<tr class="excel-row ${isT?'row-tallied':''}">
+                    <td class="text-slate-400">${idx++}</td><td class="text-left pl-3 font-black text-blue-900">${d.name}</td>
+                    <td class="${d.matchPL>=0?'txt-win':'txt-loss'} click-cell" onclick="openAudit('MATCH','${d.name}')">${formatIN(Math.round(d.matchPL))}</td>
+                    <td class="${d.sessPL>=0?'txt-win':'txt-loss'} click-cell" onclick="openAudit('SESS','${d.name}')">${formatIN(Math.round(d.sessPL))}</td>
+                    <td class="bg-slate-100 border-x border-slate-300 font-bold ${d.rowTotal>=0?'txt-win':'txt-loss'}">${formatIN(Math.round(d.rowTotal))}</td>
+                    <td class="text-slate-500">${formatIN(Math.round(d.matchComm))}</td><td class="text-slate-500">${formatIN(Math.round(d.sessComm))}</td>
+                    <td class="bg-blue-50 text-blue-900 font-bold">${formatIN(Math.round(d.totalComm))}</td>
+                    <td class="bg-slate-800 font-black text-[13px] ${d.netToday>=0?'neon-win':'neon-loss'} border-x border-slate-600">${formatIN(Math.round(d.netToday))}</td>
+                    <td class="bg-yellow-50 text-slate-700 font-bold border-r border-slate-300">${formatIN(Math.round(d.oldBal))}</td>
+                    <td class="bg-black font-black text-[14px] ${d.grandTotal>=0?'neon-win':'neon-loss'}">${formatIN(Math.round(d.grandTotal))}</td>
+                    <td class="bg-white"><input type="checkbox" onchange="toggleTallied('${d.name}')" ${isT?'checked':''} class="w-4 h-4 accent-green-600 cursor-pointer"></td>
+                </tr>`;
+            });
+            document.getElementById('match-body').innerHTML = html || '<tr><td colspan="12" class="p-10 text-center">No Data</td></tr>';
+            
+            // Footer Update
+            document.getElementById('tf-match').innerText = formatIN(Math.round(sMatch)); document.getElementById('tf-match').className = sMatch>=0?'neon-win':'neon-loss';
+            document.getElementById('tf-sess').innerText = formatIN(Math.round(sSess)); document.getElementById('tf-sess').className = sSess>=0?'neon-win':'neon-loss';
+            document.getElementById('tf-row').innerText = formatIN(Math.round(sRow)); document.getElementById('tf-row').className = sRow>=0?'neon-win':'neon-loss';
+            document.getElementById('tf-mcomm').innerText = formatIN(Math.round(sMComm));
+            document.getElementById('tf-scomm').innerText = formatIN(Math.round(sSComm));
+            document.getElementById('tf-tcomm').innerText = formatIN(Math.round(sTComm));
+            document.getElementById('tf-net').innerText = formatIN(Math.round(sNet)); document.getElementById('tf-net').className = sNet>=0?'neon-win text-[14px]':'neon-loss text-[14px]';
+            document.getElementById('tf-old').innerText = formatIN(Math.round(sOld));
+            document.getElementById('tf-grand').innerText = formatIN(Math.round(sGrand)); document.getElementById('tf-grand').className = sGrand>=0?'neon-win text-[15px]':'neon-loss text-[15px]';
+
+            if(document.getElementById('view-split').classList.contains('hidden')===false) renderSplitView();
+        }
+
+        window.openAudit = (type, pName) => {
+            if(!activeMatch) return;
+            document.getElementById('audit-title').innerText = pName;
+            document.getElementById('audit-type').innerText = type === 'MATCH' ? 'MATCH BETS' : 'SESSION BETS';
+            let html = ''; const winner = activeMatch.winner; let grandTotal = 0;
+
+            if(type === 'MATCH' && activeMatch.bets) {
+                const bets = activeMatch.bets.filter(b => b.party === pName);
+                if(bets.length === 0) html = '<tr><td colspan="6" class="p-4 text-slate-500">No Bets Found</td></tr>';
+                else {
+                    html = bets.map(b => {
+                        let win=b.amt*b.rate, loss=parseFloat(b.amt), profit=0;
+                        if(winner==="DRAW") profit=0; else if(b.mode==='L') profit=(b.team===winner)?win:-loss; else profit=(b.team!==winner)?loss:-win;
+                        grandTotal += profit;
+                        return `<tr class="border-b border-slate-200 ${b.auditChecked?'audit-row-checked':(b.mode==='L'?'audit-row-lagai':'audit-row-khai')}">
+                            <td class="p-2"><input type="checkbox" class="w-5 h-5 accent-green-600 cursor-pointer" ${b.auditChecked?'checked':''} onchange="toggleAuditCheck('MATCH', ${b.id})"></td>
+                            <td class="p-2 text-xs text-slate-500 font-bold">${b.time}</td>
+                            <td class="p-2 font-black">${b.rate}</td>
+                            <td class="p-2 font-bold ${b.mode==='L'?'text-blue-700':'text-pink-700'} leading-tight">${b.mode==='L'?'LAGAI':'KHAI'}<br><span class="text-[9px] text-slate-500 font-bold uppercase">${b.team}</span></td>
+                            <td class="p-2 font-bold text-slate-700">${b.amt}</td>
+                            <td class="p-2 font-black ${profit>=0?'txt-win':'txt-loss'}">${Math.round(profit)}</td>
+                        </tr>`;
+                    }).join('');
+                }
+            } else if (type === 'SESS' && activeMatch.sessions) {
+                const dec = activeMatch.declaredSessions || {};
+                const sessions = activeMatch.sessions.filter(s => s.party === pName && dec[s.name] !== undefined);
+                if(sessions.length === 0) html = '<tr><td colspan="6" class="p-4 text-slate-500">No Sessions Found</td></tr>';
+                else {
+                    const grouped = {};
+                    sessions.forEach(s => {
+                        if(!grouped[s.name]) grouped[s.name] = { bets: [], total: 0, result: dec[s.name] };
+                        grouped[s.name].bets.push(s);
+                        let res=dec[s.name], win=s.amt*s.rate, loss=parseFloat(s.amt), profit=0;
+                        if(s.mode==='Y') profit=(res>=s.runs)?win:-loss; else profit=(res<s.runs)?loss:-win;
+                        grouped[s.name].total += profit; grandTotal += profit;
+                    });
+                    for(const [sessName, data] of Object.entries(grouped)) {
+                        const totalColor = data.total >= 0 ? 'txt-win' : 'txt-loss'; const totalSign = data.total >= 0 ? '+' : '';
+                        html += `<tr class="group-header"><td colspan="6"><div class="flex justify-between items-center"><span class="uppercase text-slate-700 text-xs"><i class="fas fa-list mr-2 text-slate-400"></i> ${sessName} <span class="bg-white px-2 py-0.5 rounded ml-2 border border-slate-300 text-[10px] font-bold text-black">RES: ${data.result}</span></span><span class="group-total ${totalColor} text-xs">NET: ${totalSign}${formatIN(Math.round(data.total))}</span></div></td></tr>`;
+                        data.bets.forEach(s => {
+                            let res=dec[s.name], win=s.amt*s.rate, loss=parseFloat(s.amt), profit=0;
+                            if(s.mode==='Y') profit=(res>=s.runs)?win:-loss; else profit=(res<s.runs)?loss:-win;
+                            html += `<tr class="border-b border-slate-200 ${s.auditChecked?'audit-row-checked':(profit>=0?'audit-row-lagai':'audit-row-khai')}">
+                                <td class="p-2"><input type="checkbox" class="w-5 h-5 accent-green-600 cursor-pointer" ${s.auditChecked?'checked':''} onchange="toggleAuditCheck('SESS', ${s.id})"></td>
+                                <td class="p-2 text-xs text-slate-500 font-bold">${s.time||'-'}</td>
+                                <td class="p-2 font-black leading-tight">${s.runs}<br><span class="text-[9px] text-slate-500 font-bold">Rate: ${s.rate}</span></td>
+                                <td class="p-2 font-bold ${s.mode==='Y'?'text-blue-700':'text-pink-700'}">${s.mode==='Y'?'Y':'N'}</td>
+                                <td class="p-2 font-bold text-slate-700">${s.amt}</td>
+                                <td class="p-2 font-black ${profit>=0?'txt-win':'txt-loss'}">${Math.round(profit)}</td>
+                            </tr>`;
+                        });
+                    }
+                }
+            }
+            document.getElementById('audit-body').innerHTML = html;
+            document.getElementById('audit-grand-total').innerText = formatIN(Math.round(grandTotal));
+            document.getElementById('audit-grand-total').className = `text-2xl font-black ${grandTotal>=0?'text-green-400':'text-red-400'}`;
+            document.getElementById('audit-modal').classList.remove('hidden');
+        };
+
+        window.closeAudit = () => document.getElementById('audit-modal').classList.add('hidden');
+        window.toggleAuditCheck = (type, betId) => {
+            if(type === 'MATCH') { const b = activeMatch.bets.find(x => x.id === betId); if(b) b.auditChecked = !b.auditChecked; } 
+            else { const s = activeMatch.sessions.find(x => x.id === betId); if(s) s.auditChecked = !s.auditChecked; }
+            window.saveToCloud(); const checkbox = event.target; const row = checkbox.closest('tr');
+            if(checkbox.checked) row.classList.add('audit-row-checked'); else row.classList.remove('audit-row-checked');
+        };
+
+        window.toggleView = () => { const table=document.getElementById('view-table'), split=document.getElementById('view-split'), btn=document.getElementById('btn-toggle'); if(split.classList.contains('hidden')) { table.classList.add('hidden'); split.classList.remove('hidden'); btn.innerHTML='<i class="fas fa-table mr-2"></i> FULL TABLE'; renderSplitView(); } else { split.classList.add('hidden'); table.classList.remove('hidden'); btn.innerHTML='<i class="fas fa-columns mr-2"></i> SPLIT VIEW'; renderMainTable(); } };
+
+        function renderSplitView() {
+            let plusHtml='', minusHtml='', plusTotal=0, minusTotal=0, pCount=0, mCount=0;
+            currentReportData.forEach(d => { let val=Math.round(d.netToday); if(val===0) return; if(val>0){ plusTotal+=val; pCount++; plusHtml+=`<tr class="hover:bg-green-100 border-b border-green-100"><td class="text-left text-slate-700 font-bold p-2">${d.name}</td><td class="text-right text-green-700 amt-big p-2">${formatIN(val)}</td></tr>`; } else { minusTotal+=val; mCount++; minusHtml+=`<tr class="hover:bg-red-100 border-b border-red-100"><td class="text-left text-slate-700 font-bold p-2">${d.name}</td><td class="text-right text-red-700 amt-big p-2">${formatIN(val)}</td></tr>`; } });
+            document.getElementById('table-plus').innerHTML=plusHtml; document.getElementById('total-plus').innerText=formatIN(plusTotal); document.getElementById('count-plus').innerText=pCount;
+            document.getElementById('table-minus').innerHTML=minusHtml; document.getElementById('total-minus').innerText=formatIN(minusTotal); document.getElementById('count-minus').innerText=mCount;
+            let diff=plusTotal+minusTotal; document.getElementById('split-grand').innerText=formatIN(diff); document.getElementById('split-grand').className=`text-3xl font-black ${diff>=0?'text-green-400':'text-red-400'}`;
+        }
+    </script>
+</body>
+</html>

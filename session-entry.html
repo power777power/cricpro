@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <title>CricLedger | SESSION MASTER v4.7 (UI Layer Fix)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      const firebaseConfig = { apiKey: "AIzaSyDbbV6yRFMgwceFvVeSNXg90NOZGfwGswQ", authDomain: "cricledger.firebaseapp.com", projectId: "cricledger", storageBucket: "cricledger.firebasestorage.app", messagingSenderId: "181787586646", appId: "1:181787586646:web:2be72001e1610eaf354bf7" };
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      const DB_DOC = doc(db, "master", "data");
+
+      window.dbState = JSON.parse(localStorage.getItem('CRICPRO_MASTER_DB')) || { teams: [], parties: [], matches: [] };
+      window.saveToCloud = async () => { localStorage.setItem('CRICPRO_MASTER_DB', JSON.stringify(window.dbState)); await setDoc(DB_DOC, window.dbState); };
+      
+      onSnapshot(DB_DOC, (doc) => { 
+          if (doc.exists()) { 
+              window.dbState = doc.data(); 
+              if(typeof window.refreshDesk === 'function') window.refreshDesk(); 
+          } 
+      });
+    </script>
+    <style>
+        body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; }
+        .main-container { display: flex; flex-direction: column; height: 100vh; padding: 10px; gap: 10px; }
+        
+        /* ENTRY BAR Z-INDEX = 50 */
+        .top-entry-bar { height: 80px; flex-shrink: 0; position: relative; z-index: 50; overflow: visible !important; }
+        
+        .session-nav-bar { height: 50px; flex-shrink: 0; display: flex; gap: 10px; overflow-x: auto; background: #1e293b; padding: 5px; border-radius: 8px; border: 1px solid #334155; align-items: center; }
+        .content-area { flex: 1; display: grid; grid-template-columns: 1fr 350px; gap: 10px; overflow: hidden; z-index: 10; min-height: 0; }
+        .glass-panel { background: #1e293b; border: 1px solid #334151; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; }
+        .input-box { background: #020617; border: 1px solid #475569; color: white; font-weight: 700; font-size: 14px; height: 38px; border-radius: 4px; padding: 0 10px; width: 100%; transition: all 0.15s; }
+        .input-box:focus { border-color: #facc15; background: #172554; outline: none; }
+        .label-sm { font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+        .sess-chip { padding: 0 16px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-weight: 800; font-size: 12px; cursor: pointer; white-space: nowrap; background: #334155; color: #94a3b8; border: 1px solid #475569; }
+        .sess-chip.active { background: linear-gradient(135deg, #be185d 0%, #db2777 100%); color: white; border: 1px solid #f472b6; }
+        .sess-chip.new-btn { background: #2563eb; color: white; border-color: #60a5fa; }
+        .sess-chip.summ-btn { background: #f97316; color: white; border-color: #fdba74; }
+        .live-table th { background: #0f172a; color: #94a3b8; font-size: 10px; padding: 8px; text-transform: uppercase; position: sticky; top: 0; z-index: 10; }
+        .live-table td { padding: 8px 6px; font-size: 12px; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,0.05); text-transform: uppercase; }
+        .row-yes { background: #A5D8FF !important; color: #000 !important; border-left: 5px solid #1e88e5 !important; }
+        .row-no { background: #F8B4CE !important; color: #000 !important; border-left: 5px solid #d81b60 !important; }
+        .row-yes:hover, .row-no:hover { filter: brightness(1.1); cursor: pointer; }
+        .bg-tallied { opacity: 0.4; filter: grayscale(100%); }
+        .book-row { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #334155; align-items: center; cursor: pointer; transition: 0.2s; }
+        .book-row:hover { background: #334155; }
+        .summ-table th { background: #334155; color: #facc15; } .summ-table td { border-bottom: 1px solid #475569; } .summ-row:hover { background: #1e293b; }
+        
+        #custom-alert-overlay { background: rgba(0,0,0,0.95); backdrop-filter: blur(8px); z-index: 200; }
+        .alert-box { background: #1e293b; border-radius: 12px; padding: 25px; width: 400px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.8); transform: scale(0.9); transition: all 0.2s; }
+        .alert-box.show { transform: scale(1); }
+        .btn-alert { padding: 12px 20px; border-radius: 6px; font-weight: 900; text-transform: uppercase; cursor: pointer; font-size: 12px; width: 100%; letter-spacing: 1px; }
+        #toast-container { position: fixed; top: 20px; right: 20px; z-index: 210; display: flex; flex-direction: column; gap: 10px; }
+        .toast { background: #1e293b; border-left: 4px solid #22c55e; color: white; padding: 12px 20px; border-radius: 4px; font-weight: bold; font-size: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transform: translateX(100%); transition: transform 0.3s; }
+        .toast.show { transform: translateX(0); }
+        .suggestion-box { position: absolute; top: 100%; left: 0; width: 100%; background: #1e293b; border: 1px solid #3b82f6; max-height: 250px; overflow-y: auto; z-index: 1000; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.8); }
+        .suggestion-item { padding: 10px 12px; font-size: 12px; font-weight: bold; cursor: pointer; border-bottom: 1px solid #334155; color: #fff; }
+        .suggestion-item:hover { background: #3b82f6; color: white; }
+        ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-thumb { background: #475569; }
+    </style>
+</head>
+<body onkeydown="handleGlobalEnter(event)" onclick="closeSuggestions()">
+
+    <div id="custom-alert-overlay" class="hidden fixed inset-0 flex items-center justify-center">
+        <div id="custom-alert-box" class="alert-box border-2"><div id="alert-icon" class="text-5xl mb-4"></div><h2 id="alert-title" class="text-2xl font-black uppercase text-white mb-2 tracking-wide"></h2><div id="alert-msg" class="text-sm text-slate-300 font-bold mb-8 leading-relaxed whitespace-pre-line"></div><div id="alert-actions" class="flex justify-center gap-4"></div></div>
+    </div>
+    <div id="toast-container"></div>
+
+    <div id="rename-modal" class="hidden fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-blue-500 w-80 rounded-xl shadow-2xl p-4 text-center">
+            <h3 class="text-blue-400 font-black mb-4 uppercase tracking-wider text-sm">RENAME SESSION</h3>
+            <input type="text" id="rename-input" class="input-box mb-4 uppercase text-center font-bold text-yellow-400" placeholder="NEW NAME">
+            <div class="flex gap-2">
+                <button onclick="document.getElementById('rename-modal').classList.add('hidden')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded text-xs">CANCEL</button>
+                <button onclick="confirmRename()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded text-xs shadow-lg">SAVE</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sess-declare-modal" class="hidden fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-red-500 w-80 rounded-xl shadow-2xl p-6 text-center transform transition-all scale-100">
+            <h3 class="text-red-500 font-black mb-2 text-2xl tracking-widest"><i class="fas fa-gavel mr-2"></i>DECLARE ?</h3>
+            <div class="h-1 w-20 bg-red-500 mx-auto mb-4 rounded"></div>
+            <p class="text-slate-400 text-[10px] font-bold uppercase mb-1">SESSION NAME</p>
+            <p id="dec-sess-label" class="text-white text-lg font-black uppercase mb-4 tracking-wide"></p>
+            <p class="text-slate-400 text-[10px] font-bold uppercase mb-1">ENTER ACTUAL RUNS</p>
+            <input type="number" id="dec-run-input" class="input-box mb-6 text-center font-black text-3xl text-yellow-400 h-14 border-red-900 focus:border-red-500 bg-slate-950" placeholder="00">
+            <div class="flex gap-3">
+                <button onclick="closeDeclareModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded text-xs tracking-wider">CANCEL</button>
+                <button onclick="verifyDeclaration()" class="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded text-xs shadow-lg shadow-red-500/20 tracking-wider">PROCEED</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sess-tally-modal" class="hidden fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-cyan-500 w-full max-w-2xl h-[70vh] rounded-xl shadow-2xl flex flex-col">
+            <div class="bg-slate-800 p-3 flex justify-between items-center border-b border-slate-700">
+                <span class="text-cyan-400 font-black uppercase tracking-widest text-lg" id="tally-title">PARTY BETS</span>
+                <button onclick="document.getElementById('sess-tally-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 bg-slate-950">
+                <table class="w-full text-center live-table">
+                    <thead><tr><th>CHK</th><th>RUN</th><th>RATE</th><th>Y / N</th><th>AMT</th><th>TIME</th></tr></thead>
+                    <tbody id="tally-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="match-modal" class="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center">
+        <div class="bg-slate-800 p-6 rounded border border-yellow-500 w-80 text-center"><h2 class="text-yellow-400 font-black mb-4">SELECT MATCH</h2><select id="match-selector" class="input-box mb-4 text-center"></select><button onclick="selectMatch()" class="bg-yellow-500 text-black font-bold w-full py-2 rounded">START</button></div>
+    </div>
+
+    <div id="summary-modal" class="hidden fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-orange-500 w-full max-w-4xl h-[80vh] rounded-xl shadow-2xl flex flex-col">
+            <div class="bg-slate-800 p-3 flex justify-between items-center border-b border-slate-700"><span class="text-orange-400 font-black uppercase tracking-widest text-lg"><i class="fas fa-chart-pie mr-2"></i> SESSION SUMMARY</span><button onclick="document.getElementById('summary-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button></div>
+            <div class="p-4 bg-slate-900 border-b border-slate-700"><label class="label-sm text-slate-400 mb-2 block">SELECT DECLARED SESSION</label><div class="flex gap-2"><select id="summ-selector" class="input-box w-1/2"></select><button onclick="generateSummaryReport()" class="bg-orange-600 hover:bg-orange-500 text-white font-bold px-6 rounded uppercase text-sm">SHOW REPORT</button></div></div>
+            <div class="flex-1 overflow-y-auto p-4 bg-slate-950"><table class="w-full text-center summ-table"><thead class="bg-slate-800 text-yellow-400 sticky top-0"><tr><th class="p-3">S.NO</th><th class="p-3 text-left">PARTY NAME</th><th class="p-3">RAW P/L</th><th class="p-3">COMM</th><th class="p-3">GRAND TOTAL</th></tr></thead><tbody id="summ-body" class="text-slate-300 font-bold text-sm"></tbody><tfoot class="bg-slate-900 border-t-2 border-slate-600"><tr><td colspan="2" class="p-3 text-right font-black text-white">TOTAL BOOK:</td><td id="foot-raw" class="p-3 font-bold">-</td><td id="foot-comm" class="p-3 font-bold text-yellow-400">-</td><td id="foot-total" class="p-3 font-black text-lg">-</td></tr></tfoot></table></div>
+        </div>
+    </div>
+
+    <div id="manager-modal" class="hidden fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-green-500 w-full max-w-md rounded-xl shadow-2xl flex flex-col max-h-[80vh]">
+            <div class="bg-slate-800 p-3 flex justify-between items-center border-b border-slate-700"><span class="text-green-400 font-black uppercase tracking-widest text-sm">SESSION MANAGER</span><button onclick="document.getElementById('manager-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button></div>
+            <div class="p-4 bg-slate-800/50 border-b border-slate-700"><label class="label-sm text-white mb-1">CREATE NEW SESSION</label><div class="flex gap-2"><input type="text" id="mgr-new-name" class="input-box uppercase" placeholder="EX: 15 OVER"><button onclick="createSessionFromMgr()" class="bg-green-600 hover:bg-green-500 text-white font-bold px-4 rounded">ADD</button></div></div>
+            <div class="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-950" id="mgr-list"></div>
+        </div>
+    </div>
+
+    <div id="edit-modal" class="hidden fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-blue-500 w-full max-w-5xl rounded-xl shadow-2xl overflow-hidden relative">
+            <div class="bg-slate-800 p-2 text-center border-b border-slate-700"><span class="text-blue-400 font-black uppercase tracking-widest text-sm">MODIFY BET</span></div>
+            <div class="p-6 flex items-end gap-2">
+                <div class="input-group flex-[2]"><label class="label-sm text-slate-500">Session</label><input type="text" id="e-name" class="input-box text-slate-500 border-slate-700" readonly></div>
+                <div class="input-group flex-1"><label class="label-sm text-yellow-400">Runs</label><input type="number" id="e-runs" class="input-box text-yellow-300 text-center font-black enter-nav" data-next="e-rate"></div>
+                <div class="input-group flex-1"><label class="label-sm text-white">Rate</label><input type="number" id="e-rate" class="input-box text-center enter-nav" data-next="e-mode"></div>
+                <div class="input-group flex-1"><label class="label-sm text-white">Y/N</label><select id="e-mode" class="input-box text-center font-bold enter-nav" data-next="e-amt"><option value="Y">YES</option><option value="N">NO</option></select></div>
+                <div class="input-group flex-[1.5]"><label class="label-sm text-white">Amount</label><input type="text" id="e-amt" onkeyup="hS(this)" class="input-box text-center font-black enter-nav" data-next="e-party"></div>
+                <div class="input-group flex-[2] relative"><label class="label-sm text-slate-400">Party</label><input type="text" id="e-party" class="input-box uppercase font-bold text-yellow-400 enter-nav" data-next="btn-update" oninput="searchParty(this, 'e-suggestion-box')" autocomplete="off"><div id="e-suggestion-box" class="suggestion-box"></div></div>
+            </div>
+            <div class="p-4 bg-slate-950 flex justify-end gap-3 border-t border-slate-800">
+                <button onclick="document.getElementById('edit-modal').classList.add('hidden')" class="text-slate-500 font-bold text-xs uppercase px-4 hover:text-white">Cancel</button>
+                <button onclick="deleteBet()" class="bg-red-900/50 hover:bg-red-600 text-red-200 hover:text-white border border-red-800 px-6 py-2 rounded font-black text-sm uppercase">DELETE</button>
+                <button id="btn-update" onclick="saveEdit()" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2 rounded font-black text-sm uppercase shadow-lg">UPDATE</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-desk" class="hidden main-container">
+        <div class="glass-panel top-entry-bar border-t-4 border-green-500 p-2 relative">
+            <div class="absolute top-1 right-2 text-[9px] font-bold text-slate-500 uppercase tracking-widest">Match: <span id="match-title" class="text-white">...</span> <span id="lock-badge" class="bg-pink-600 text-white px-2 rounded ml-2 animate-pulse">LOCKED</span></div>
+            <div class="flex items-end gap-2 h-full pb-1">
+                <div class="input-group flex-[2]"><label class="label-sm text-cyan-400">1. Name</label><input type="text" id="s-name" class="input-box uppercase text-slate-500 cursor-not-allowed" readonly placeholder="SELECT BELOW"></div>
+                <div class="input-group flex-1"><label class="label-sm text-yellow-400">2. Runs</label><input type="number" id="s-runs" class="input-box font-black text-yellow-300 text-center enter-nav" data-next="s-rate" placeholder="0"></div>
+                <div class="input-group flex-1"><label class="label-sm text-white">3. Rate</label><input type="number" id="s-rate" class="input-box text-center enter-nav" value="1.00" data-next="s-mode"></div>
+                <div class="input-group flex-1"><label class="label-sm text-white">4. Y / N</label><select id="s-mode" class="input-box text-center font-bold enter-nav" data-next="s-amt"><option value="Y" class="text-green-400">YES</option><option value="N" class="text-red-400">NO</option></select></div>
+                <div class="input-group flex-[1.5]"><label class="label-sm text-white">5. Amount</label><input type="text" id="s-amt" onkeyup="hS(this)" class="input-box text-center enter-nav" data-next="s-party" placeholder="0"></div>
+                <div class="input-group flex-[2] relative"><label class="label-sm text-slate-400">6. Party</label><input type="text" id="s-party" class="input-box uppercase font-bold text-yellow-400 enter-nav" placeholder="TYPE..." oninput="searchParty(this, 's-suggestion-box')" autocomplete="off"><div id="s-suggestion-box" class="suggestion-box"></div></div>
+                <button id="btn-save" onclick="addBet()" class="bg-green-600 hover:bg-green-500 text-white h-[38px] px-6 rounded font-black text-sm uppercase shadow-lg border border-green-400">SAVE</button>
+            </div>
+        </div>
+        <div class="session-nav-bar" id="session-bar"></div>
+        <div class="content-area">
+            <div class="glass-panel">
+                <div class="bg-slate-800 p-2 border-b border-slate-700 flex justify-between items-center"><span class="font-bold text-xs text-slate-300">LIVE BETS <span id="filter-label" class="text-pink-400 ml-1"></span></span><span id="log-count" class="text-[9px] bg-slate-700 px-2 rounded text-white">0</span></div>
+                <div class="overflow-y-auto flex-1">
+                    <table class="w-full text-center live-table">
+                        <thead>
+                            <tr><th style="width: 40px;">No.</th><th>RUN</th><th>RATE</th><th>Y / N</th><th>AMT</th><th>PARTY</th><th>SESSION</th><th>TIME</th></tr>
+                        </thead>
+                        <tbody id="logs-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="flex flex-col gap-2 h-full overflow-hidden">
+                <div class="glass-panel flex-1 border-t-4 border-pink-500 flex flex-col">
+                    <div class="p-2 bg-slate-900 text-center text-[10px] font-black text-cyan-400 border-b border-slate-800 uppercase tracking-wider">NET PROFIT METER <span id="meter-context" class="text-pink-500"></span></div>
+                    <div class="flex-1 overflow-y-auto bg-slate-950"><table class="w-full text-center live-table"><thead><tr><th>RUNS</th><th>P/L</th></tr></thead><tbody id="meter-body"></tbody></table></div>
+                </div>
+                <div class="glass-panel flex-1 border-t-4 border-yellow-500 flex flex-col">
+                    <div class="p-2 bg-slate-900 text-center text-[10px] font-black text-yellow-400 border-b border-slate-800 uppercase tracking-wider">SESSION BOOK (DOUBLE CLICK TO TALLY)</div>
+                    <div class="flex-1 overflow-y-auto bg-slate-950"><div id="session-book-body"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let curMatch = null, activeSess = null, editId = null;
+        let sessionToRename = null, sessToDeclare = null;
+
+        function showToast(msg, type='success') { const c = document.getElementById('toast-container'); const t = document.createElement('div'); t.className = `toast border-l-4 ${type==='success'?'border-green-500':'border-red-500'}`; t.innerHTML = `<i class="fas ${type==='success'?'fa-check-circle text-green-400':'fa-times-circle text-red-400'} mr-2"></i> ${msg}`; c.appendChild(t); setTimeout(() => t.classList.add('show'), 10); setTimeout(() => { t.classList.remove('show'); setTimeout(()=>t.remove(), 300); }, 3000); }
+        function showAlert(title, msg, type='info', callback=null) {
+            const box = document.getElementById('custom-alert-box'); document.getElementById('custom-alert-overlay').classList.remove('hidden'); setTimeout(() => box.classList.add('show'), 10); document.getElementById('alert-title').innerText = title; document.getElementById('alert-msg').innerText = msg; box.className = 'alert-box border-2 ' + (type === 'error' ? 'border-red-500' : 'border-blue-500'); document.getElementById('alert-icon').innerHTML = type === 'error' ? '<i class="fas fa-exclamation-triangle text-red-500"></i>' : '<i class="fas fa-info-circle text-blue-400"></i>'; const acts = document.getElementById('alert-actions'); if(callback) { acts.innerHTML = `<button id="btn-no" class="btn-alert bg-slate-700 text-slate-300">CANCEL</button><button id="btn-yes" class="btn-alert ${type==='error'?'bg-red-600':'bg-blue-600'} text-white">CONFIRM</button>`; document.getElementById('btn-no').onclick = closeAlert; document.getElementById('btn-yes').onclick = () => { closeAlert(); callback(); }; } else { acts.innerHTML = `<button onclick="closeAlert()" class="btn-alert bg-slate-700 text-white w-full">OK</button>`; }
+        }
+        window.closeAlert = () => { const box = document.getElementById('custom-alert-box'); box.classList.remove('show'); setTimeout(() => document.getElementById('custom-alert-overlay').classList.add('hidden'), 200); };
+
+        function init() { if(!window.dbState.matches) window.dbState.matches = []; const active = window.dbState.matches.filter(m => m.status !== 'DONE').reverse(); if(active.length === 0) return showAlert("NO DATA", "No active matches found.", "error"); document.getElementById('match-selector').innerHTML = active.map(m => `<option value="${m.id}">${m.t1} vs ${m.t2}</option>`).join(''); }
+        setTimeout(init, 1000);
+        
+        window.selectMatch = () => { 
+            const id = parseInt(document.getElementById('match-selector').value); 
+            curMatch = window.dbState.matches.find(m => m.id === id); 
+            if(curMatch) { 
+                if(!curMatch.sessions) curMatch.sessions = []; 
+                if(!curMatch.manualSessions) curMatch.manualSessions = []; 
+                if(!curMatch.declaredSessions) curMatch.declaredSessions = {}; 
+                
+                if(curMatch.declaredSessions) {
+                    Object.keys(curMatch.declaredSessions).forEach(key => {
+                        if(key === 'null' || key === 'undefined' || key === '') {
+                            delete curMatch.declaredSessions[key];
+                        }
+                    });
+                    window.saveToCloud();
+                }
+
+                document.getElementById('match-modal').classList.add('hidden'); 
+                document.getElementById('main-desk').classList.remove('hidden'); 
+                document.getElementById('match-title').innerText = `${curMatch.t1} vs ${curMatch.t2}`; 
+                refreshDesk(); 
+            } 
+        };
+
+        window.openSummaryModal = () => {
+            const decKeys = Object.keys(curMatch.declaredSessions || {}).filter(k => k !== 'null' && k !== 'undefined');
+            if(decKeys.length === 0) return showAlert("NO DATA", "No sessions have been declared yet.", "error");
+            document.getElementById('summ-selector').innerHTML = decKeys.map(s => `<option value="${s}">${s}</option>`).join('');
+            document.getElementById('summary-modal').classList.remove('hidden');
+            generateSummaryReport();
+        };
+
+        window.generateSummaryReport = () => {
+            const sName = document.getElementById('summ-selector').value;
+            const result = curMatch.declaredSessions[sName];
+            const bets = curMatch.sessions.filter(s => s.name === sName);
+            
+            let partyMap = {};
+            bets.forEach(b => {
+                if(!partyMap[b.party]) partyMap[b.party] = { raw: 0, comm: 0 };
+                
+                let amt = parseFloat(b.amt); if(isNaN(amt)) amt = 0;
+                let rate = parseFloat(b.rate); if(isNaN(rate)) rate = 1;
+                let pWin = amt * rate; 
+                let pLoss = amt; 
+                let pl = 0;
+                if(b.mode === 'Y') { pl = (result >= b.runs) ? pWin : -pLoss; } else { pl = (result < b.runs) ? pLoss : -pWin; }
+                
+                partyMap[b.party].raw += pl;
+                
+                let p = window.dbState.parties.find(x => x.name === b.party) || {};
+                let commPct = parseFloat(b.sComm);
+                if(isNaN(commPct)) commPct = parseFloat(p.sComm);
+                if(isNaN(commPct)) commPct = 0;
+
+                let commAmt = amt * (commPct / 100);
+                partyMap[b.party].comm += commAmt;
+            });
+
+            let html = ''; let totalRaw = 0, totalComm = 0, totalGrand = 0; let i = 1;
+            for(let pName in partyMap) {
+                let d = partyMap[pName];
+                let grand = d.raw + d.comm;
+                totalRaw += d.raw; totalComm += d.comm; totalGrand += grand;
+                html += `<tr class="summ-row border-b border-slate-800" onclick="openSessionPartyDetail('${pName}', '${sName}')"><td class="p-3 text-slate-500">${i++}</td><td class="p-3 text-left font-bold text-white hover:text-blue-400">${pName}</td><td class="p-3 font-bold ${d.raw>=0?'text-green-400':'text-red-400'}">${Math.round(d.raw)}</td><td class="p-3 font-bold text-yellow-400">${Math.round(d.comm)}</td><td class="p-3 font-black ${grand>=0?'text-green-400':'text-red-400'}">${Math.round(grand)}</td></tr>`;
+            }
+            document.getElementById('summ-body').innerHTML = html;
+            document.getElementById('foot-raw').innerText = Math.round(totalRaw); document.getElementById('foot-raw').className = `p-3 font-bold ${totalRaw>=0?'text-green-400':'text-red-400'}`;
+            document.getElementById('foot-comm').innerText = Math.round(totalComm);
+            document.getElementById('foot-total').innerText = Math.round(totalGrand); document.getElementById('foot-total').className = `p-3 font-black text-lg ${totalGrand>=0?'text-green-400':'text-red-400'}`;
+        };
+
+        window.openSessionManager = () => { document.getElementById('mgr-new-name').value = ''; renderManagerList(); document.getElementById('manager-modal').classList.remove('hidden'); document.getElementById('mgr-new-name').focus(); };
+        window.createSessionFromMgr = () => { const name = document.getElementById('mgr-new-name').value.toUpperCase().trim(); if(!name) return showToast("ENTER NAME", "error"); if(curMatch.manualSessions.includes(name)) return showToast("EXISTS ALREADY", "error"); curMatch.manualSessions.push(name); window.saveToCloud(); document.getElementById('mgr-new-name').value = ''; renderManagerList(); refreshDesk(); showToast("SESSION ADDED"); };
+        window.deleteSessionFromMgr = (sName) => { const hasBets = curMatch.sessions.some(s => s.name === sName); if(hasBets) { showAlert("ACTION DENIED", "Plz pehle is session ki bets delete kre session fir delete hoga", "error"); return; } showAlert("DELETE SESSION?", `Delete '${sName}'?`, "error", () => { curMatch.manualSessions = curMatch.manualSessions.filter(s => s !== sName); if(curMatch.declaredSessions) delete curMatch.declaredSessions[sName]; if(activeSess === sName) { activeSess = null; document.getElementById('s-name').value = ''; } window.saveToCloud(); renderManagerList(); refreshDesk(); showToast("SESSION DELETED"); }); };
+        window.openRenameModal = (oldName) => { sessionToRename = oldName; document.getElementById('rename-input').value = oldName; document.getElementById('rename-modal').classList.remove('hidden'); document.getElementById('rename-input').focus(); };
+        window.confirmRename = () => { const newName = document.getElementById('rename-input').value; const oldName = sessionToRename; if(newName && newName.trim() !== "" && newName !== oldName) { const clean = newName.toUpperCase().trim(); if(curMatch.manualSessions.includes(clean)) return showToast("EXISTS", "error"); const idx = curMatch.manualSessions.indexOf(oldName); if(idx !== -1) curMatch.manualSessions[idx] = clean; curMatch.sessions.forEach(s => { if(s.name === oldName) s.name = clean; }); if(curMatch.declaredSessions[oldName]) { curMatch.declaredSessions[clean] = curMatch.declaredSessions[oldName]; delete curMatch.declaredSessions[oldName]; } if(activeSess === oldName) activeSess = clean; window.saveToCloud(); renderManagerList(); refreshDesk(); document.getElementById('rename-modal').classList.add('hidden'); showToast("RENAMED"); } };
+        function renderManagerList() { const all = [...new Set([...curMatch.sessions.map(s=>s.name), ...curMatch.manualSessions])].sort(); document.getElementById('mgr-list').innerHTML = all.map(s => `<div class="flex justify-between items-center bg-slate-900 p-2 mb-1 border border-slate-700 rounded"><span class="text-white font-bold text-xs pl-2">${s}</span><div class="flex gap-2"><button onclick="openRenameModal('${s}')" class="text-blue-400 hover:text-white px-2"><i class="fas fa-edit"></i></button><button onclick="deleteSessionFromMgr('${s}')" class="text-red-500 hover:text-red-300 px-2"><i class="fas fa-trash"></i></button></div></div>`).join(''); }
+        window.selectSessionTab = (sName) => { activeSess = sName; document.getElementById('s-name').value = sName; document.getElementById('filter-label').innerText = `(${sName})`; document.getElementById('meter-context').innerText = `(${sName})`; document.getElementById('s-runs').focus(); refreshDesk(); };
+        function hS(e) { let v=e.value.toLowerCase(), n=parseFloat(v)||1; if(v.endsWith('h')) e.value=n*1000; else if(v.endsWith('t')) e.value=n*10000; else if(v.endsWith('p')) e.value=n*100000; }
+        window.searchParty = (input, boxId) => { const val = input.value.toUpperCase(); const box = document.getElementById(boxId); if(val.length === 0) { box.style.display = 'none'; return; } const matches = window.dbState.parties.filter(p => p.name.startsWith(val)).sort((a,b) => a.name.localeCompare(b.name)); if(matches.length > 0) { box.innerHTML = matches.map(p => `<div class="suggestion-item" onclick="selectParty('${p.name}', '${input.id}', '${boxId}')">${p.name}</div>`).join(''); box.style.display = 'block'; } else { box.style.display = 'none'; } };
+        window.selectParty = (name, inputId, boxId) => { document.getElementById(inputId).value = name; document.getElementById(boxId).style.display = 'none'; if(inputId === 's-party') document.getElementById('btn-save').focus(); if(inputId === 'e-party') document.getElementById('btn-update').focus(); };
+        window.closeSuggestions = () => { setTimeout(() => document.querySelectorAll('.suggestion-box').forEach(b => b.style.display = 'none'), 200); };
+        
+        function handleGlobalEnter(e) { 
+            if(e.key === 'Enter') { 
+                if(e.target.id === 'mgr-new-name') { createSessionFromMgr(); return; } 
+                if(e.target.id === 'rename-input') { confirmRename(); return; }
+                if(e.target.id === 'dec-run-input') { verifyDeclaration(); return; } 
+
+                if(e.target.id === 's-party' || e.target.id === 'e-party') { 
+                    const boxId = e.target.id==='s-party'?'s-suggestion-box':'e-suggestion-box'; 
+                    const box = document.getElementById(boxId); 
+                    if(box.style.display === 'block' && box.firstChild) { box.firstChild.click(); e.preventDefault(); return; } 
+                    else { if(e.target.id === 's-party') addBet(); if(e.target.id === 'e-party') saveEdit(); e.preventDefault(); return; }
+                } 
+                if(e.target.dataset.next) { e.preventDefault(); const nextEl = document.getElementById(e.target.dataset.next); if(nextEl) nextEl.focus(); } 
+            } 
+        }
+
+        window.addBet = () => { 
+            if(!activeSess) return showToast("SELECT A SESSION TAB FIRST", "error"); 
+            let sName = document.getElementById('s-name').value; 
+            if(curMatch.declaredSessions[sName]) return showAlert("STOP", "SESSION IS DECLARED!", "error"); 
+            const pName = document.getElementById('s-party').value.toUpperCase().trim(); 
+            if(!pName) return showToast("ENTER PARTY", "error"); 
+            const pData = window.dbState.parties.find(p => p.name === pName); 
+            if(!pData) return showToast("INVALID PARTY! (Party Not Found)", "error");
+            let rawRuns = document.getElementById('s-runs').value; let runs = parseInt(rawRuns);
+            if(isNaN(runs) || runs < 0) return showToast("INVALID RUNS", "error");
+            let rawAmt = document.getElementById('s-amt').value; let amt = parseFloat(rawAmt);
+            if(isNaN(amt) || amt <= 0) return showToast("INVALID AMOUNT", "error");
+            curMatch.sessions.push({ id: Date.now(), type: 'SESSION', name: sName, runs: runs, rate: parseFloat(document.getElementById('s-rate').value), amt: amt, mode: document.getElementById('s-mode').value, party: pName, time: new Date().toLocaleTimeString(), sComm: pData.sComm || 0, isTallied: false }); 
+            window.saveToCloud(); document.getElementById('s-amt').value = ''; document.getElementById('s-party').value = ''; document.getElementById('s-runs').focus(); showToast("BET SAVED"); refreshDesk(); 
+        };
+
+        window.openEdit = (id) => { const bet = curMatch.sessions.find(b => b.id === id); if(!bet) return; if(curMatch.declaredSessions[bet.name]) return showAlert("STOP", "UNDECLARE SESSION FIRST!", "error"); editId = id; document.getElementById('e-name').value = bet.name; document.getElementById('e-runs').value = bet.runs; document.getElementById('e-rate').value = bet.rate; document.getElementById('e-amt').value = bet.amt; document.getElementById('e-mode').value = bet.mode; document.getElementById('e-party').value = bet.party; document.getElementById('edit-modal').classList.remove('hidden'); document.getElementById('e-runs').focus(); };
+        window.saveEdit = () => { const bet = curMatch.sessions.find(b => b.id === editId); if(bet) { const newParty = document.getElementById('e-party').value.toUpperCase().trim(); const p = window.dbState.parties.find(x => x.name === newParty); if(!p) return showToast("INVALID PARTY! (Party Not Found)", "error"); let rawAmt = document.getElementById('e-amt').value; let amt = parseFloat(rawAmt); if(isNaN(amt) || amt <= 0) return showToast("INVALID AMOUNT", "error"); 
+            let rawRuns = document.getElementById('e-runs').value; let runs = parseInt(rawRuns);
+            if(isNaN(runs) || runs < 0) return showToast("INVALID RUNS", "error");
+            bet.runs = runs; bet.rate = parseFloat(document.getElementById('e-rate').value); bet.amt = amt; bet.mode = document.getElementById('e-mode').value; bet.party = newParty; bet.sComm = p.sComm || 0; } window.saveToCloud(); document.getElementById('edit-modal').classList.add('hidden'); refreshDesk(); showToast("UPDATED"); };
+        window.deleteBet = () => { showAlert("DELETE?", "Remove this entry?", "error", () => { curMatch.sessions = curMatch.sessions.filter(b => b.id !== editId); window.saveToCloud(); document.getElementById('edit-modal').classList.add('hidden'); refreshDesk(); showToast("DELETED"); }); };
+        window.declare = (s) => { sessToDeclare = s; document.getElementById('dec-sess-label').innerText = s; document.getElementById('dec-run-input').value = ''; document.getElementById('sess-declare-modal').classList.remove('hidden'); document.getElementById('dec-run-input').focus(); };
+        window.closeDeclareModal = () => { document.getElementById('sess-declare-modal').classList.add('hidden'); sessToDeclare = null; };
+        window.verifyDeclaration = () => { const currentSess = sessToDeclare; const r = document.getElementById('dec-run-input').value; if(!r) return showToast("ENTER RUNS", "error"); closeDeclareModal(); showAlert("CONFIRM DECLARE", `SESSION: ${currentSess}\nRESULT: ${r}\n\nSURE TO LOCK?`, "error", () => { curMatch.declaredSessions[currentSess] = parseInt(r); window.saveToCloud(); refreshDesk(); showToast(`RESULT: ${r}`); }); };
+        window.undeclare = (s) => { showAlert("UNDECLARE?", `Undo result for '${s}'?`, "info", () => { delete curMatch.declaredSessions[s]; window.saveToCloud(); refreshDesk(); showToast("SESSION OPENED"); }); };
+        window.openSessionPartyDetail = (pName, specificSess = null) => { const sessName = specificSess || activeSess; if(!sessName) return; const bets = curMatch.sessions.filter(s => s.name === sessName && s.party === pName).sort((a,b) => b.id - a.id); if(bets.length === 0) return; document.getElementById('tally-title').innerText = `${pName} (${sessName})`; document.getElementById('tally-body').innerHTML = bets.map(b => { let runs = isNaN(parseInt(b.runs)) ? 0 : parseInt(b.runs); const css = b.mode==='Y' ? 'row-yes text-slate-900' : 'row-no text-slate-900'; const tallyClass = b.isTallied ? 'opacity-40 grayscale' : ''; const checkAction = specificSess ? 'disabled' : `onchange="toggleSessionTally(${b.id}, '${pName}')"`; return `<tr class="${css} ${tallyClass}"><td class="p-2"><input type="checkbox" class="w-5 h-5 accent-slate-800" ${b.isTallied?'checked':''} ${checkAction}></td><td class="font-black">${runs}</td><td class="font-bold">${b.rate}</td><td class="font-black">${b.mode === 'Y' ? 'YES' : 'NO'}</td><td class="font-bold">${b.amt}</td><td class="text-[10px] font-bold">${b.time}</td></tr>`; }).join(''); document.getElementById('sess-tally-modal').classList.remove('hidden'); };
+        window.toggleSessionTally = (betId, pName) => { const bet = curMatch.sessions.find(b => b.id === betId); if(bet) { bet.isTallied = !bet.isTallied; window.saveToCloud(); window.openSessionPartyDetail(pName); refreshDesk(); } };
+
+        window.refreshDesk = () => {
+            if(!curMatch) return;
+            const allSess = [...new Set([...curMatch.sessions.map(s=>s.name), ...curMatch.manualSessions])].sort();
+            let navHtml = `<div onclick="openSessionManager()" class="sess-chip new-btn"><i class="fas fa-plus mr-1"></i> ADD / EDIT</div><div onclick="openSummaryModal()" class="sess-chip summ-btn ml-1"><i class="fas fa-file-alt mr-1"></i> SUMMARY</div>`;
+            navHtml += allSess.map(s => { const isActive = (s === activeSess); const isDec = curMatch.declaredSessions[s] !== undefined; return `<div onclick="selectSessionTab('${s}')" class="sess-chip ${isActive ? 'active' : ''}">${s} ${isDec ? `<span class="ml-2 text-[10px] bg-green-900 px-1 rounded text-green-300">${curMatch.declaredSessions[s]}</span><span onclick="event.stopPropagation(); undeclare('${s}')" class="ml-2 text-red-400 hover:text-white"><i class="fas fa-undo"></i></span>` : `<span onclick="event.stopPropagation(); declare('${s}')" class="ml-2 text-blue-400 hover:text-white"><i class="fas fa-gavel"></i></span>`}</div>`; }).join(''); document.getElementById('session-bar').innerHTML = navHtml;
+
+            if(activeSess) {
+                let logs = curMatch.sessions.filter(l => l.name === activeSess).sort((a,b)=>b.id-a.id);
+                document.getElementById('log-count').innerText = logs.length;
+                document.getElementById('logs-body').innerHTML = logs.map((l,index) => { 
+                    const baseCss = l.mode==='Y'?'row-yes text-slate-900':'row-no text-slate-900'; 
+                    const finalCss = l.isTallied ? `${baseCss} bg-tallied` : baseCss;
+                    let displayRuns = isNaN(parseInt(l.runs)) ? 0 : l.runs;
+                    let sNo = logs.length - index;
+                    return `<tr class="${finalCss} border-b border-black/10" ondblclick="openEdit(${l.id})"><td>${sNo}</td><td class="font-black text-lg">${displayRuns}</td><td>${l.rate}</td><td class="font-black">${l.mode==='Y'?'YES':'NO'}</td><td class="">${l.amt}</td><td class="tracking-wide">${l.party}</td><td class="text-xs text-slate-600 font-bold">${l.name}</td><td class="text-[10px] font-bold opacity-70">${l.time}</td></tr>`; 
+                }).join('');
+
+                let validLogs = logs.map(b => { return { ...b, runs: isNaN(parseInt(b.runs)) ? 0 : parseInt(b.runs), amt: isNaN(parseFloat(b.amt)) ? 0 : parseFloat(b.amt) }; });
+                let runs = validLogs.map(b => b.runs); let min = (runs.length > 0) ? Math.min(...runs)-5 : 0; if(min<0) min=0; let max = (runs.length > 0) ? Math.max(...runs)+5 : 20; let mtr = {}; for(let i=min; i<=max; i++) mtr[i]=0;
+                let pBook = {};
+                
+                validLogs.forEach(b => {
+                    let amt = b.amt;
+                    let p = window.dbState.parties.find(x => x.name === b.party) || {};
+                    let sComm = parseFloat(b.sComm); if(isNaN(sComm)) sComm = parseFloat(p.sComm); if(isNaN(sComm)) sComm = 0;
+                    let shr = parseFloat(p.shr); if(isNaN(shr)) shr = 0;
+                    let ts1 = parseFloat(p.thirdShr1); if(isNaN(ts1)) ts1 = 0;
+                    let ts2 = parseFloat(p.thirdShr2); if(isNaN(ts2)) ts2 = 0;
+                    let deduct = shr + ts1 + ts2;
+                    let cutFactor = 1 - (deduct/100);
+                    
+                    let commAmt = amt * (sComm/100);
+                    let rate = parseFloat(b.rate); if(isNaN(rate)) rate = 1;
+                    
+                    let pWin = amt * rate; 
+                    let pLoss = amt;
+                    
+                    for(let r=min; r<=max; r++) {
+                        let bookieRaw = 0;
+                        if(b.mode === 'Y') { bookieRaw = (r >= b.runs) ? -pWin : pLoss; } else { bookieRaw = (r < b.runs) ? -pLoss : pWin; }
+                        
+                        // FIX: COMMISSION IS EXPENSE (SUBTRACTED)
+                        let net = (bookieRaw - commAmt) * cutFactor;
+                        mtr[r] += net;
+                    }
+                    if(!pBook[b.party]) pBook[b.party] = { yes: 0, no: 0 };
+                    if(b.mode === 'Y') pBook[b.party].yes += amt; else pBook[b.party].no += amt;
+                });
+
+                let htmlMeter = ''; for(let i=min; i<=max; i++) { htmlMeter += `<tr class="border-b border-slate-800"><td class="bg-slate-900 border-r border-slate-700 text-slate-400 font-bold">${i}</td><td class="${mtr[i]>=0?'text-green-400':'text-red-400'} font-bold">${Math.round(mtr[i])}</td></tr>`; } document.getElementById('meter-body').innerHTML = htmlMeter;
+                let htmlBook = '';
+                for(let pName in pBook) {
+                    htmlBook += `<div class="book-row hover:bg-slate-800 select-none" ondblclick="openSessionPartyDetail('${pName}')" title="Double click to Tally"><span class="text-white font-bold text-xs w-1/3 flex items-center gap-2"><i class="fas fa-hand-pointer text-[10px] text-slate-500 opacity-0 group-hover:opacity-100"></i> ${pName}</span><span class="w-1/3 text-center text-blue-400 font-bold">${pBook[pName].yes > 0 ? pBook[pName].yes : '-'}</span><span class="w-1/3 text-center text-pink-400 font-bold">${pBook[pName].no > 0 ? pBook[pName].no : '-'}</span></div>`;
+                }
+                document.getElementById('session-book-body').innerHTML = htmlBook;
+            } else { document.getElementById('logs-body').innerHTML = ''; document.getElementById('meter-body').innerHTML = ''; document.getElementById('session-book-body').innerHTML = ''; }
+        };
+    </script>
+</body>
+</html>

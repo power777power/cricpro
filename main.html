@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CricLedger Pro - Master Panel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; display: flex; height: 100vh; background: #f4f7f6; overflow: hidden; }
+        
+        /* Sidebar Styling */
+        .sidebar { 
+            width: 260px; 
+            background: #2c3e50; 
+            color: white; 
+            display: flex; 
+            flex-direction: column; 
+            transition: margin-left 0.3s ease;
+            flex-shrink: 0;
+            border-right: 1px solid #1a252f;
+        }
+
+        /* Class to hide sidebar */
+        .sidebar.toggled { margin-left: -260px; }
+
+        .sidebar-header { 
+            padding: 20px; 
+            text-align: center; 
+            background: #1a252f; 
+            font-size: 1.2rem; 
+            font-weight: bold; 
+            color: #3498db; 
+            border-bottom: 1px solid #34495e; 
+            white-space: nowrap;
+            letter-spacing: 1px;
+        }
+        
+        .sidebar-menu { flex: 1; padding: 10px 0; overflow-y: auto; }
+        .sidebar-menu a { 
+            display: block; 
+            padding: 12px 20px; 
+            color: #bdc3c7; 
+            text-decoration: none; 
+            font-size: 15px;
+            border-left: 4px solid transparent;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .sidebar-menu a:hover, .sidebar-menu a:focus { 
+            background: #34495e; 
+            color: white; 
+            border-left: 4px solid #2ecc71; 
+            padding-left: 25px; /* Slight slide effect */
+            outline: none;
+        }
+
+        /* Active State */
+        .sidebar-menu a.active {
+            background: #2c3e50;
+            color: white;
+            border-left: 4px solid #e67e22; 
+            font-weight: bold;
+            box-shadow: inset 5px 0 10px -5px rgba(0,0,0,0.5);
+        }
+
+        /* Main Content Area */
+        .main-content { flex: 1; display: flex; flex-direction: column; width: 100%; }
+        
+        /* Top Navigation Bar */
+        .top-nav { 
+            height: 60px; 
+            background: white; 
+            display: flex; 
+            align-items: center; 
+            padding: 0 20px; 
+            border-bottom: 1px solid #ddd; 
+            justify-content: space-between; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        .nav-left { display: flex; align-items: center; gap: 15px; }
+
+        /* Hamburger Menu Button */
+        #menu-toggle {
+            font-size: 24px;
+            cursor: pointer;
+            color: #2c3e50;
+            background: none;
+            border: none;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        #menu-toggle:hover { background: #eee; }
+
+        .system-title { font-weight: bold; color: #555; font-size: 1.1rem; }
+
+        /* Clock Styling */
+        .clock-container { text-align: right; color: #2c3e50; line-height: 1.2; }
+        #digital-clock { font-size: 1.2rem; font-weight: bold; color: #e67e22; font-family: 'Courier New', monospace; }
+        #digital-date { font-size: 0.8rem; color: #7f8c8d; font-weight: 500; }
+        
+        /* Iframe */
+        iframe { width: 100%; height: calc(100vh - 60px); border: none; background: #fff; }
+
+        /* Scrollbar Styling for Sidebar */
+        .sidebar-menu::-webkit-scrollbar { width: 6px; }
+        .sidebar-menu::-webkit-scrollbar-track { background: #2c3e50; }
+        .sidebar-menu::-webkit-scrollbar-thumb { background: #34495e; border-radius: 3px; }
+
+        /* Mobile Responsiveness */
+        @media (max-width: 768px) {
+            .sidebar { margin-left: -260px; position: absolute; height: 100%; z-index: 1000; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
+            .sidebar.active-mobile { margin-left: 0; }
+            .system-title { font-size: 0.9rem; }
+            #digital-date { display: none; } /* Hide date on very small screens to save space */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">CRICLEDGER PRO</div>
+        <nav class="sidebar-menu">
+            <a href="dashboard.html" target="contentFrame" onclick="setActive(this)">📊 Admin Dashboard</a>
+            <a href="match-entry.html" target="contentFrame" onclick="setActive(this)">➕ Match Entry</a>
+            <a href="session-entry.html" target="contentFrame" onclick="setActive(this)">⏳ Session Entry</a>
+            <a href="ledger.html" target="contentFrame" onclick="setActive(this)">📑 Ledger</a>
+            <a href="party-master.html" target="contentFrame" onclick="setActive(this)">👤 Party Master</a>
+            <a href="reports.html" target="contentFrame" onclick="setActive(this)">📋 Reports</a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <div class="top-nav">
+            <div class="nav-left">
+                <button id="menu-toggle" title="Toggle Sidebar">☰</button>
+                <div class="system-title">Control Panel: Live Mode</div>
+            </div>
+            
+            <div class="clock-container">
+                <div id="digital-clock">00:00:00</div>
+                <div id="digital-date">Loading...</div>
+            </div>
+        </div>
+
+        <iframe name="contentFrame" src="dashboard.html"></iframe>
+    </div>
+
+    <script>
+        // --- 1. Clock Functionality ---
+        function updateClock() {
+            const now = new Date();
+            let h = now.getHours();
+            let m = now.getMinutes();
+            let s = now.getSeconds();
+            let ampm = h >= 12 ? 'PM' : 'AM';
+            h = h % 12;
+            h = h ? h : 12; 
+            m = m < 10 ? '0' + m : m;
+            s = s < 10 ? '0' + s : s;
+            
+            document.getElementById('digital-clock').innerText = `${h}:${m}:${s} ${ampm}`;
+
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('digital-date').innerText = now.toLocaleDateString('en-US', options);
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // --- 2. Sidebar Toggle Logic ---
+        const toggleBtn = document.getElementById('menu-toggle');
+        const sidebar = document.getElementById('sidebar');
+
+        toggleBtn.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                sidebar.classList.toggle('active-mobile'); // Slide in on Mobile
+            } else {
+                sidebar.classList.toggle('toggled'); // Push out on Desktop
+            }
+        });
+
+        // --- 3. Active Link Highlighter ---
+        function setActive(element) {
+            // Remove 'active' from all links
+            document.querySelectorAll('.sidebar-menu a').forEach(link => link.classList.remove('active'));
+            
+            // Add 'active' to clicked link
+            element.classList.add('active');
+            
+            // Auto-close sidebar on mobile after selection
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('active-mobile');
+            }
+        }
+        
+        // Highlight the first link by default
+        document.querySelector('.sidebar-menu a').classList.add('active');
+    </script>
+
+</body>
+</html>

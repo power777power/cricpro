@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <title>CricLedger | ADMIN DASHBOARD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      const firebaseConfig = { apiKey: "AIzaSyDbbV6yRFMgwceFvVeSNXg90NOZGfwGswQ", authDomain: "cricledger.firebaseapp.com", projectId: "cricledger", storageBucket: "cricledger.firebasestorage.app", messagingSenderId: "181787586646", appId: "1:181787586646:web:2be72001e1610eaf354bf7" };
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      const DB_DOC = doc(db, "master", "data");
+
+      // DEFAULT TEAMS LIST
+      const ALL_TEAMS = [
+        "INDIA", "PAKISTAN", "AUSTRALIA", "ENGLAND", "SOUTH AFRICA", "NEW ZEALAND", "WEST INDIES", "SRI LANKA", "AFGHANISTAN", "BANGLADESH",
+        "MUMBAI INDIANS", "CSK", "RCB", "KKR", "GUJARAT TITANS", "LUCKNOW SG", "RAJASTHAN ROYALS", "DELHI CAPITALS", "PUNJAB KINGS", "SRH",
+        "LAHORE QALANDARS", "KARACHI KINGS", "ISLAMABAD UNITED", "PESHAWAR ZALMI", "MULTAN SULTANS", "QUETTA GLADIATORS",
+        "SYDNEY SIXERS", "PERTH SCORCHERS", "BRISBANE HEAT", "MELBOURNE STARS", "SYDNEY THUNDER", "ADELAIDE STRIKERS", "HOBART HURRICANES", "MELBOURNE RENEGADES"
+      ];
+
+      window.dbState = JSON.parse(localStorage.getItem('CRICPRO_MASTER_DB')) || { teams: ALL_TEAMS, parties: [], matches: [] };
+      window.saveToCloud = async () => { localStorage.setItem('CRICPRO_MASTER_DB', JSON.stringify(window.dbState)); await setDoc(DB_DOC, window.dbState); };
+      
+      onSnapshot(DB_DOC, (doc) => {
+          if (doc.exists()) {
+              let cloudData = doc.data();
+              // Merge Teams (Don't lose new ones)
+              let needsUpdate = false;
+              if(!cloudData.teams) cloudData.teams = ALL_TEAMS;
+              ALL_TEAMS.forEach(t => { if(!cloudData.teams.includes(t)) { cloudData.teams.push(t); needsUpdate = true; } });
+              
+              if(needsUpdate) { window.dbState = cloudData; window.saveToCloud(); } 
+              else { window.dbState = cloudData; }
+              if(typeof window.refreshDashboard === 'function') window.refreshDashboard();
+          } else {
+              window.dbState.teams = ALL_TEAMS; window.saveToCloud();
+          }
+      });
+    </script>
+    <style>
+        body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; }
+        .glass-panel { background: #1e293b; border: 1px solid #334151; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .input-box { background: #020617; border: 1px solid #475569; color: white; font-weight: 700; height: 35px; border-radius: 4px; padding: 0 10px; width: 100%; }
+        .input-box:focus { border-color: #facc15; outline: none; }
+        
+        .btn { font-weight: 900; text-transform: uppercase; border-radius: 4px; padding: 0 16px; height: 35px; font-size: 11px; transition: 0.2s; }
+        .btn:active { transform: scale(0.95); }
+        .btn-green { background: #16a34a; color: white; } .btn-green:hover { background: #15803d; }
+        .btn-red { background: #dc2626; color: white; } .btn-red:hover { background: #b91c1c; }
+        .btn-blue { background: #2563eb; color: white; } .btn-blue:hover { background: #1d4ed8; }
+
+        .team-item { padding: 8px 12px; border-bottom: 1px solid #334155; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .team-item:hover { background: #334155; color: #facc15; }
+        
+        .match-card { background: #020617; border: 1px solid #334155; border-left: 4px solid #facc15; padding: 15px; border-radius: 6px; position: relative; }
+        .match-card.done { border-left-color: #475569; opacity: 0.6; }
+        
+        ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-thumb { background: #475569; }
+    </style>
+</head>
+<body>
+
+    <div id="edit-modal" class="hidden fixed inset-0 z-50 bg-black/90 flex items-center justify-center">
+        <div class="bg-slate-800 p-6 rounded-lg border border-slate-600 w-96 text-center">
+            <h2 id="modal-title" class="text-yellow-400 font-black mb-4 text-xl">EDIT</h2>
+            <div id="team-edit-area" class="hidden">
+                <input type="text" id="edit-team-name" class="input-box text-center uppercase mb-4">
+            </div>
+            <div id="match-edit-area" class="hidden">
+                <input type="text" id="edit-m-t1" class="input-box text-center uppercase mb-2">
+                <div class="text-xs text-slate-500 font-bold mb-2">VS</div>
+                <input type="text" id="edit-m-t2" class="input-box text-center uppercase mb-4">
+            </div>
+            <div class="flex gap-2">
+                <button onclick="saveEdit()" class="btn btn-green flex-1">UPDATE</button>
+                <button onclick="deleteItem()" class="btn btn-red flex-1">DELETE</button>
+            </div>
+            <button onclick="document.getElementById('edit-modal').classList.add('hidden')" class="mt-4 text-xs text-slate-500 underline">CANCEL</button>
+        </div>
+    </div>
+
+    <div class="flex h-screen p-4 gap-4">
+        
+        <div class="w-1/4 flex flex-col gap-4">
+            <div class="glass-panel p-4">
+                <h2 class="text-cyan-400 font-black text-sm uppercase mb-3"><i class="fas fa-users mr-2"></i> TEAM MANAGER</h2>
+                <div class="flex gap-2 mb-2">
+                    <input type="text" id="new-team" class="input-box uppercase" placeholder="NEW TEAM NAME">
+                    <button onclick="addTeam()" class="btn btn-blue"><i class="fas fa-plus"></i></button>
+                </div>
+            </div>
+            <div class="glass-panel flex-1 overflow-hidden flex flex-col">
+                <div class="bg-slate-900 p-2 text-[10px] text-slate-500 font-bold text-center border-b border-slate-700">REGISTERED TEAMS</div>
+                <div id="team-list" class="flex-1 overflow-y-auto"></div>
+            </div>
+        </div>
+
+        <div class="flex-1 flex flex-col gap-4">
+            
+            <div class="glass-panel p-4 flex items-end gap-3 bg-slate-800/50">
+                <div class="flex-1">
+                    <label class="text-[10px] text-yellow-400 font-bold block mb-1">TEAM A</label>
+                    <select id="sel-t1" class="input-box"></select>
+                </div>
+                <div class="flex items-center justify-center pb-2">
+                    <span class="text-slate-500 font-black italic text-xl">VS</span>
+                </div>
+                <div class="flex-1">
+                    <label class="text-[10px] text-yellow-400 font-bold block mb-1">TEAM B</label>
+                    <select id="sel-t2" class="input-box"></select>
+                </div>
+                <button onclick="createMatch()" class="btn btn-green h-[35px] px-6 shadow-lg shadow-green-900/20">
+                    <i class="fas fa-play mr-2"></i> CREATE LIVE MATCH
+                </button>
+            </div>
+
+            <div class="glass-panel flex-1 overflow-hidden flex flex-col">
+                <div class="bg-slate-900 p-3 flex justify-between items-center border-b border-slate-700">
+                    <span class="text-white font-black text-sm uppercase"><i class="fas fa-list mr-2"></i> MATCH DASHBOARD</span>
+                    <span class="text-[10px] text-slate-500">Only LIVE matches appear in Entry Apps</span>
+                </div>
+                <div id="match-list" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let editType = null; // 'TEAM' or 'MATCH'
+        let editId = null;
+
+        function refreshDashboard() {
+            // 1. Render Teams
+            const teams = [...new Set(window.dbState.teams)].sort();
+            document.getElementById('team-list').innerHTML = teams.map(t => 
+                `<div onclick="openEditTeam('${t}')" class="team-item">
+                    <span class="font-bold text-xs">${t}</span>
+                    <i class="fas fa-pen text-[10px] text-slate-600"></i>
+                </div>`
+            ).join('');
+
+            // 2. Populate Dropdowns
+            const opts = teams.map(t => `<option value="${t}">${t}</option>`).join('');
+            document.getElementById('sel-t1').innerHTML = opts;
+            document.getElementById('sel-t2').innerHTML = opts;
+
+            // 3. Render Matches
+            const matches = window.dbState.matches.sort((a,b) => b.id - a.id);
+            document.getElementById('match-list').innerHTML = matches.map(m => {
+                const isLive = m.status === 'LIVE';
+                return `
+                <div class="match-card ${!isLive ? 'done' : ''} flex justify-between items-center">
+                    <div>
+                        <div class="text-xs text-slate-500 font-bold mb-1">${m.date || 'Unknown Date'} <span class="ml-2 px-2 py-0.5 rounded text-[9px] ${isLive?'bg-green-900 text-green-400':'bg-slate-700 text-slate-400'}">${m.status}</span></div>
+                        <div class="text-xl font-black italic text-white uppercase">${m.t1} <span class="text-yellow-500 text-sm mx-1">vs</span> ${m.t2}</div>
+                    </div>
+                    <div class="flex gap-2">
+                        ${isLive ? `<button onclick="toggleStatus(${m.id}, 'DONE')" class="btn bg-slate-700 hover:bg-red-600 text-slate-300 hover:text-white">CLOSE MATCH</button>` 
+                                 : `<button onclick="toggleStatus(${m.id}, 'LIVE')" class="btn bg-slate-800 hover:bg-green-600 text-slate-500 hover:text-white">RE-OPEN</button>`}
+                        
+                        <button onclick="openEditMatch(${m.id})" class="btn bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-900"><i class="fas fa-edit"></i></button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // --- TEAM LOGIC ---
+        window.addTeam = () => {
+            const n = document.getElementById('new-team').value.toUpperCase().trim();
+            if(!n) return alert("Enter Name");
+            if(!window.dbState.teams.includes(n)) {
+                window.dbState.teams.push(n);
+                window.saveToCloud();
+                document.getElementById('new-team').value = '';
+            }
+        };
+
+        // --- MATCH LOGIC ---
+        window.createMatch = () => {
+            const t1 = document.getElementById('sel-t1').value;
+            const t2 = document.getElementById('sel-t2').value;
+            if(t1 === t2) return alert("Select different teams");
+
+            // *** CRITICAL: CREATING COMPATIBLE STRUCTURE ***
+            const newMatch = {
+                id: Date.now(),
+                t1: t1,
+                t2: t2,
+                status: 'LIVE',
+                date: new Date().toLocaleDateString('en-GB'),
+                bets: [],             // For Match Master v1.8
+                sessions: [],         // For Session Master v3.0 (Logs)
+                manualSessions: [],   // For Session Master v3.0 (Tabs) - CRITICAL
+                declaredSessions: {}  // For Session Summary - CRITICAL
+            };
+
+            window.dbState.matches.push(newMatch);
+            window.saveToCloud();
+        };
+
+        window.toggleStatus = (id, newStatus) => {
+            const m = window.dbState.matches.find(x => x.id === id);
+            if(m) {
+                if(newStatus === 'DONE' && !confirm("Close this match? It will disappear from Entry Apps.")) return;
+                m.status = newStatus;
+                window.saveToCloud();
+            }
+        };
+
+        // --- EDIT MODAL LOGIC ---
+        window.openEditTeam = (name) => {
+            editType = 'TEAM'; editId = name;
+            document.getElementById('modal-title').innerText = "EDIT TEAM";
+            document.getElementById('team-edit-area').classList.remove('hidden');
+            document.getElementById('match-edit-area').classList.add('hidden');
+            document.getElementById('edit-team-name').value = name;
+            document.getElementById('edit-modal').classList.remove('hidden');
+        };
+
+        window.openEditMatch = (id) => {
+            editType = 'MATCH'; editId = id;
+            const m = window.dbState.matches.find(x => x.id === id);
+            document.getElementById('modal-title').innerText = "EDIT MATCH";
+            document.getElementById('team-edit-area').classList.add('hidden');
+            document.getElementById('match-edit-area').classList.remove('hidden');
+            document.getElementById('edit-m-t1').value = m.t1;
+            document.getElementById('edit-m-t2').value = m.t2;
+            document.getElementById('edit-modal').classList.remove('hidden');
+        };
+
+        window.saveEdit = () => {
+            if(editType === 'TEAM') {
+                const newName = document.getElementById('edit-team-name').value.toUpperCase().trim();
+                const idx = window.dbState.teams.indexOf(editId);
+                if(idx !== -1 && newName) window.dbState.teams[idx] = newName;
+            } else {
+                const m = window.dbState.matches.find(x => x.id === editId);
+                if(m) {
+                    m.t1 = document.getElementById('edit-m-t1').value.toUpperCase();
+                    m.t2 = document.getElementById('edit-m-t2').value.toUpperCase();
+                }
+            }
+            window.saveToCloud();
+            document.getElementById('edit-modal').classList.add('hidden');
+        };
+
+        window.deleteItem = () => {
+            if(!confirm("DELETE PERMANENTLY? This cannot be undone.")) return;
+            if(editType === 'TEAM') {
+                window.dbState.teams = window.dbState.teams.filter(t => t !== editId);
+            } else {
+                window.dbState.matches = window.dbState.matches.filter(m => m.id !== editId);
+            }
+            window.saveToCloud();
+            document.getElementById('edit-modal').classList.add('hidden');
+        };
+
+    </script>
+</body>
+</html>

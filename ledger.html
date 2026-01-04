@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <title>CricLedger Pro | LEDGER MASTER v14 (Final Balance Fix)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      
+      const firebaseConfig = { apiKey: "AIzaSyDbbV6yRFMgwceFvVeSNXg90NOZGfwGswQ", authDomain: "cricledger.firebaseapp.com", projectId: "cricledger", storageBucket: "cricledger.firebasestorage.app", messagingSenderId: "181787586646", appId: "1:181787586646:web:2be72001e1610eaf354bf7" };
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      const DB_DOC = doc(db, "master", "data");
+
+      window.dbState = JSON.parse(localStorage.getItem('CRICPRO_MASTER_DB')) || { parties: [], matches: [], transactions: [] };
+
+      window.saveData = async () => {
+          localStorage.setItem('CRICPRO_MASTER_DB', JSON.stringify(window.dbState));
+          renderDashboard();
+          if(window.currentParty) openLedger(window.currentParty);
+          try { await setDoc(DB_DOC, window.dbState, { merge: true }); } catch(e) {}
+      };
+
+      onSnapshot(DB_DOC, (doc) => { 
+          if (doc.exists()) { 
+              window.dbState = doc.data();
+              renderDashboard();
+              if(window.currentParty) openLedger(window.currentParty);
+          } 
+      });
+    </script>
+
+    <style>
+        body { background: #e2e8f0; color: #0f172a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        .top-bar { background: #1e293b; padding: 10px; display: flex; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 50; border-bottom: 3px solid #334155; }
+        .search-box { width: 300px; background: #0f172a; border: 1px solid #475569; color: #facc15; padding: 8px 15px; border-radius: 4px; outline: none; text-align: center; font-weight: bold; text-transform: uppercase; }
+        
+        #view-dashboard { flex: 1; display: flex; padding: 10px; gap: 10px; overflow: hidden; }
+        .col-box { flex: 1; background: white; border: 1px solid #94a3b8; display: flex; flex-direction: column; overflow: hidden; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
+        .col-header { padding: 8px; text-align: center; font-weight: 900; color: white; text-transform: uppercase; font-size: 14px; letter-spacing: 1px; }
+        .bg-green-head { background: #15803d; } .bg-red-head { background: #b91c1c; }
+        
+        .list-area { flex: 1; overflow-y: auto; background: #f8fafc; }
+        .party-row { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; cursor: pointer; display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; transition: 0.1s; }
+        .party-row:hover { background: #cbd5e1; }
+        .col-foot { padding: 8px; text-align: right; background: #e2e8f0; border-top: 2px solid #94a3b8; font-weight: 900; font-size: 16px; }
+
+        /* LEDGER EXCEL GRID */
+        #view-ledger { position: absolute; inset: 0; background: #f1f5f9; display: none; flex-direction: column; z-index: 60; }
+        .ledger-head { background: #f8fafc; padding: 10px 15px; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        
+        .entry-bar { background: #1e293b; padding: 8px 15px; display: none; gap: 10px; align-items: flex-end; border-bottom: 4px solid #facc15; z-index: 70; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .entry-bar.active { display: flex; animation: slideDown 0.2s; }
+        @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+
+        .eb-field { display: flex; flex-direction: column; position: relative; }
+        .eb-label { font-size: 10px; color: #94a3b8; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
+        .eb-input { background: #0f172a; border: 1px solid #475569; color: white; padding: 6px; border-radius: 2px; font-weight: bold; outline: none; height: 32px; font-size: 13px; }
+        .eb-input:focus { border-color: #facc15; }
+        
+        .btn-action { padding: 0 15px; height: 32px; border-radius: 2px; font-weight: 900; font-size: 11px; cursor: pointer; text-transform: uppercase; border: none; }
+        .btn-save { background: #facc15; color: black; } .btn-save:hover { background: #eab308; }
+        .btn-cross { background: #f97316; color: white; } .btn-cross:hover { background: #ea580c; }
+        .btn-close { background: #dc2626; color: white; width: 32px; display: flex; align-items: center; justify-content: center; }
+
+        /* SUGGESTION BOX */
+        .cross-sugg { position: absolute; top: 100%; left: 0; width: 100%; background: white; border: 1px solid #cbd5e1; max-height: 200px; overflow-y: auto; display: none; z-index: 999; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .cs-item { padding: 10px; font-size: 13px; font-weight: bold; cursor: pointer; border-bottom: 1px solid #f1f5f9; color: #334155; }
+        .cs-item:hover { background: #facc15; color: black; }
+
+        /* EXCEL TABLE */
+        .excel-container { flex: 1; overflow: auto; padding: 10px; background: #cbd5e1; }
+        .excel-table { width: 100%; background: white; border-collapse: collapse; font-family: 'Calibri', sans-serif; border: 1px solid #64748b; font-size: 13px; }
+        .excel-table th { background: #e2e8f0; color: #334155; padding: 6px; text-align: center; border: 1px solid #94a3b8; font-weight: 900; text-transform: uppercase; position: sticky; top: 0; z-index: 10; }
+        .excel-table td { border: 1px solid #cbd5e1; padding: 4px 8px; font-weight: 600; color: #0f172a; }
+        .excel-row:hover { background: #fef08a !important; cursor: pointer; }
+        .excel-row:nth-child(even) { background: #f8fafc; }
+
+        .amt-col { text-align: right; font-family: 'Consolas', monospace; font-weight: 700; letter-spacing: 0.5px; }
+        .t-green { color: #166534; } .t-red { color: #dc2626; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <input type="text" id="search" class="search-box" placeholder="SEARCH PARTY..." onkeydown="checkSearch(event)">
+    </div>
+
+    <div id="view-dashboard">
+        <div class="col-box border-t-4 border-green-600">
+            <div class="col-header bg-green-head">LENA HAI (RECEIVABLE)</div>
+            <div class="list-area" id="list-lena"></div>
+            <div class="col-foot t-green" id="total-lena">0</div>
+        </div>
+        <div class="col-box border-t-4 border-red-600">
+            <div class="col-header bg-red-head">DENA HAI (PAYABLE)</div>
+            <div class="list-area" id="list-dena"></div>
+            <div class="col-foot t-red" id="total-dena">0</div>
+        </div>
+    </div>
+
+    <div id="view-ledger">
+        <div class="ledger-head">
+            <div><h1 class="text-2xl font-black uppercase text-slate-800" id="p-name">---</h1><p class="text-xs font-bold text-slate-500">DOUBLE CLICK ENTRY TO EDIT</p></div>
+            <div class="text-right flex items-center gap-2">
+                <span id="p-bal" class="text-3xl font-black mr-4 font-mono">0</span>
+                <button onclick="openCashEntry()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded font-bold text-xs shadow">CASH (+/-)</button>
+                <button onclick="openCrossEntry()" class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded font-bold text-xs shadow">CROSS (HAWALA)</button>
+                <button onclick="closeLedger()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 rounded font-bold text-xs shadow">CLOSE</button>
+            </div>
+        </div>
+
+        <div class="entry-bar" id="cash-bar">
+            <div class="text-[10px] font-black text-yellow-400 self-center mr-2 uppercase tracking-widest" id="mode-label">CASH</div>
+            <div class="eb-field">
+                <span class="eb-label">Type</span>
+                <select id="c-type" class="eb-input w-[120px] cursor-pointer">
+                    <option value="RECV">PAYMENT AAYI (Recv)</option>
+                    <option value="PAY">PAYMENT GAYI (Pay)</option>
+                </select>
+            </div>
+            <div class="eb-field">
+                <span class="eb-label">Amount</span>
+                <input type="text" id="c-amt" class="eb-input w-[120px] text-right text-yellow-400 font-black" placeholder="0" onkeydown="handleShortcut(event, 'c-amt', 'c-rem')">
+            </div>
+            <div class="eb-field flex-1">
+                <span class="eb-label">Remark</span>
+                <input type="text" id="c-rem" class="eb-input" placeholder="Remark..." onkeydown="if(event.key==='Enter') saveCash()">
+            </div>
+            <button onclick="saveCash()" id="btn-save-cash" class="btn-action btn-save shadow-lg">SAVE</button>
+            <button onclick="hideCurrentBar()" class="btn-action btn-close shadow-lg"><i class="fas fa-times"></i></button>
+        </div>
+
+        <div class="entry-bar" id="cross-bar">
+            <div class="text-[10px] font-black text-orange-400 self-center mr-2 uppercase tracking-widest">CROSS</div>
+            <div class="eb-field flex-1 relative">
+                <span class="eb-label">Transfer To (Search Party)</span>
+                <input type="text" id="x-search" class="eb-input uppercase font-bold text-orange-400" placeholder="TYPE PARTY NAME..." onkeyup="searchCrossParty(this)" autocomplete="off">
+                <div id="x-suggestions" class="cross-sugg"></div>
+            </div>
+            <div class="eb-field">
+                <span class="eb-label">Amount</span>
+                <input type="text" id="x-amt" class="eb-input w-[120px] text-right text-yellow-400 font-black" placeholder="0" onkeydown="handleShortcut(event, 'x-amt', 'x-rem')">
+            </div>
+            <div class="eb-field flex-1">
+                <span class="eb-label">Remark</span>
+                <input type="text" id="x-rem" class="eb-input" placeholder="Note..." onkeydown="if(event.key==='Enter') saveCross()">
+            </div>
+            <button onclick="saveCross()" class="btn-action btn-cross shadow-lg">TRANSFER</button>
+            <button onclick="hideCurrentBar()" class="btn-action btn-close shadow-lg"><i class="fas fa-times"></i></button>
+        </div>
+
+        <div class="excel-container" id="scroll-target">
+            <table class="excel-table">
+                <thead>
+                    <tr>
+                        <th width="140">DATE & TIME</th>
+                        <th class="text-left pl-2">PARTICULARS</th>
+                        <th width="100">TYPE</th>
+                        <th class="text-right" width="120">CREDIT (+)</th>
+                        <th class="text-right" width="120">DEBIT (-)</th>
+                        <th class="text-right" width="140" style="background:#1e293b; color:#facc15; border-color:#0f172a">BALANCE</th>
+                    </tr>
+                </thead>
+                <tbody id="ledger-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const formatIN = (n) => new Intl.NumberFormat('en-IN').format(Math.round(n));
+        const formatDate = (ts) => new Date(ts).toLocaleDateString('en-GB');
+        const formatTime = (ts) => new Date(ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        window.currentParty = null;
+        let editTrxId = null;
+
+        // 1. DASHBOARD & SEARCH
+        function renderDashboard() {
+            const parties = window.dbState.parties || [];
+            let hL = '', hD = '', sL = 0, sD = 0;
+            [...parties].sort((a,b) => a.name.localeCompare(b.name)).forEach(p => {
+                const bal = parseFloat(p.balance) || 0;
+                if(bal === 0) return;
+                if(bal < 0) { sL += Math.abs(bal); hL += `<div class="party-row" onclick="openLedger('${p.name}')"><span>${p.name}</span><span class="t-green">${formatIN(Math.abs(bal))}</span></div>`; }
+                else { sD += bal; hD += `<div class="party-row" onclick="openLedger('${p.name}')"><span>${p.name}</span><span class="t-red">${formatIN(bal)}</span></div>`; }
+            });
+            document.getElementById('list-lena').innerHTML = hL;
+            document.getElementById('list-dena').innerHTML = hD;
+            document.getElementById('total-lena').innerText = formatIN(sL);
+            document.getElementById('total-dena').innerText = formatIN(sD);
+        }
+
+        window.checkSearch = (e) => { if(e.key === 'Enter') { const val = e.target.value.toLowerCase().trim(); const found = window.dbState.parties.find(p => p.name.toLowerCase().includes(val)); if(found) { openLedger(found.name); e.target.value = ''; } } };
+
+        // 2. LEDGER LOGIC (FIXED SORTING & RUNNING BALANCE)
+        window.openLedger = (name) => {
+            window.currentParty = name;
+            document.getElementById('view-ledger').style.display = 'flex';
+            document.getElementById('p-name').innerText = name;
+            hideCurrentBar();
+
+            const allItems = [];
+            
+            // A. Matches (Calculated P/L)
+            (window.dbState.matches || []).forEach(m => {
+                if(m.status !== 'DECLARED') return;
+                let pl = 0;
+                if(m.bets) m.bets.filter(b => b.party === name).forEach(b => { let w=b.amt*b.rate, l=parseFloat(b.amt); if(m.winner!=='DRAW') pl += (b.mode==='L'?(b.team===m.winner?w:-l):(b.team!==m.winner?l:-w)); });
+                if(m.sessions && m.declaredSessions) m.sessions.filter(s => s.party === name && m.declaredSessions[s.name]!==undefined).forEach(s => { let r=m.declaredSessions[s.name], w=s.amt*s.rate, l=parseFloat(s.amt); pl += (s.mode==='Y'?(r>=s.runs?w:-l):(r<s.runs?l:-w)); });
+                
+                if(pl !== 0) {
+                    // Force date to be 11:59 PM of that day to ensure it usually comes after transactions of same day, or keep actual if desired.
+                    // For correctness, we use timestamp derived from date string. 
+                    const mDate = new Date(m.date); 
+                    // Set time to End of Day to separate from day transactions if preferred, or keep as is. Using mDate directly.
+                    allItems.push({ 
+                        id: `MATCH-${m.id}`, 
+                        ts: mDate.getTime(), 
+                        desc: `MATCH: ${m.t1} vs ${m.t2}`, 
+                        cr: pl>=0, 
+                        amt: Math.abs(pl), 
+                        isTrx: false 
+                    });
+                }
+            });
+
+            // B. Transactions (Raw Cash/Cross)
+            (window.dbState.transactions || []).filter(t => t.party === name).forEach(t => { 
+                allItems.push({ 
+                    id: t.id, 
+                    ts: t.id, 
+                    desc: t.remark || 'Cash Entry', 
+                    cr: t.type==='RECV', 
+                    amt: Math.abs(parseFloat(t.amount)), 
+                    isTrx: true, 
+                    type: t.type 
+                }); 
+            });
+            
+            // CRITICAL: SORT BY TIMESTAMP (Oldest First)
+            allItems.sort((a,b) => a.ts - b.ts);
+            
+            let html = '', runBal = 0;
+            // Opening Row
+            html += `<tr class="excel-row bg-slate-100"><td class="text-center font-bold text-slate-500">-</td><td colspan="4" class="font-bold text-slate-600 italic">OPENING ACCOUNT</td><td class="amt-col text-slate-500">0</td></tr>`;
+
+            // Loop and Calculate Running Balance
+            allItems.forEach(r => { 
+                // Apply P/L to Running Balance
+                if(r.cr) runBal += parseFloat(r.amt); else runBal -= parseFloat(r.amt); 
+                
+                const dblClickAction = r.isTrx ? `ondblclick="editTransaction(${r.id})"` : '';
+                const rowClass = r.isTrx ? 'excel-row hover:bg-yellow-50' : 'bg-slate-50';
+                const typeBadge = r.isTrx ? (r.cr ? '<span class="text-[10px] bg-green-100 text-green-800 px-1 rounded border border-green-300">CASH IN</span>' : '<span class="text-[10px] bg-red-100 text-red-800 px-1 rounded border border-red-300">CASH OUT</span>') : '<span class="text-[10px] bg-blue-100 text-blue-800 px-1 rounded border border-blue-300">MATCH</span>';
+
+                html += `<tr class="${rowClass}" ${dblClickAction} title="${r.isTrx?'Double Click to Edit':''}">
+                    <td class="text-center text-xs text-slate-500 font-medium">${formatDate(r.ts)} <span class="text-[10px] opacity-70 block">${formatTime(r.ts)}</span></td>
+                    <td class="text-sm uppercase font-bold text-slate-700">${r.desc}</td>
+                    <td class="text-center">${typeBadge}</td>
+                    <td class="amt-col t-green">${r.cr ? formatIN(r.amt) : ''}</td>
+                    <td class="amt-col t-red">${!r.cr ? formatIN(r.amt) : ''}</td>
+                    <td class="amt-col ${runBal>=0?'t-red':'t-green'}" style="background:#f1f5f9">${formatIN(runBal)}</td>
+                </tr>`; 
+            });
+
+            document.getElementById('ledger-body').innerHTML = html;
+            const balEl = document.getElementById('p-bal');
+            balEl.innerText = formatIN(runBal);
+            balEl.className = `text-3xl font-black mr-4 font-mono ${runBal<0?'t-green':'t-red'}`;
+            document.getElementById('scroll-target').scrollTop = document.getElementById('scroll-target').scrollHeight;
+        };
+
+        // 3. EDIT & SAVE LOGIC (CASH)
+        window.openCashEntry = () => { hideCurrentBar(); document.getElementById('cash-bar').classList.add('active'); document.getElementById('btn-save-cash').innerText = "SAVE"; document.getElementById('c-amt').value = ''; document.getElementById('c-rem').value = ''; document.getElementById('c-amt').focus(); editTrxId = null; };
+
+        window.editTransaction = (id) => {
+            const t = window.dbState.transactions.find(x => x.id === id);
+            if(!t) return;
+            hideCurrentBar();
+            document.getElementById('cash-bar').classList.add('active');
+            document.getElementById('btn-save-cash').innerText = "UPDATE";
+            document.getElementById('c-type').value = t.type;
+            document.getElementById('c-amt').value = Math.abs(t.amount);
+            document.getElementById('c-rem').value = t.remark;
+            document.getElementById('c-amt').focus();
+            editTrxId = id;
+        };
+
+        window.saveCash = () => {
+            let amt = parseFloat(document.getElementById('c-amt').value); if(!amt) return alert("Amount Required"); amt = Math.abs(amt);
+            const type = document.getElementById('c-type').value; const rem = document.getElementById('c-rem').value;
+            const party = window.dbState.parties.find(p => p.name === window.currentParty);
+            if(editTrxId) {
+                const idx = window.dbState.transactions.findIndex(x => x.id === editTrxId);
+                if(idx > -1) {
+                    const old = window.dbState.transactions[idx];
+                    if(old.type === 'RECV') party.balance -= Math.abs(old.amount); else party.balance += Math.abs(old.amount);
+                    window.dbState.transactions[idx] = { ...old, amount: amt, type: type, remark: rem };
+                    if(type === 'RECV') party.balance += amt; else party.balance -= amt;
+                }
+            } else {
+                if(type === 'RECV') party.balance = (parseFloat(party.balance)||0) + amt; else party.balance = (parseFloat(party.balance)||0) - amt;
+                window.dbState.transactions.push({ id: Date.now(), party: window.currentParty, type: type, amount: amt, remark: rem });
+            }
+            window.saveData(); hideCurrentBar();
+        };
+
+        // 4. CROSS ENTRY LOGIC (FIXED SELECT)
+        window.openCrossEntry = () => { hideCurrentBar(); document.getElementById('cross-bar').classList.add('active'); document.getElementById('x-search').value = ''; document.getElementById('x-amt').value = ''; document.getElementById('x-rem').value = ''; document.getElementById('x-search').focus(); };
+        
+        window.searchCrossParty = (inp) => {
+            const val = inp.value.toLowerCase(); const box = document.getElementById('x-suggestions');
+            if(!val) { box.style.display = 'none'; return; }
+            const matches = window.dbState.parties.filter(p => p.name !== window.currentParty && p.name.toLowerCase().includes(val));
+            // FIXED: Using onmousedown to prevent blur issue
+            box.innerHTML = matches.map(p => `<div class="cs-item" onmousedown="selectCrossParty('${p.name}')">${p.name}</div>`).join('');
+            box.style.display = matches.length ? 'block' : 'none';
+        };
+
+        window.selectCrossParty = (name) => {
+            document.getElementById('x-search').value = name; document.getElementById('x-suggestions').style.display = 'none';
+            document.getElementById('x-amt').focus();
+        };
+
+        window.saveCross = () => {
+            const targetName = document.getElementById('x-search').value;
+            let amt = parseFloat(document.getElementById('x-amt').value);
+            if(!targetName || !amt) return alert("Select Party & Amount");
+            amt = Math.abs(amt);
+            
+            const p1 = window.dbState.parties.find(p => p.name === window.currentParty);
+            const p2 = window.dbState.parties.find(p => p.name === targetName);
+            if(!p2) return alert("Invalid Target Party");
+            
+            const rem = document.getElementById('x-rem').value;
+            p1.balance = (parseFloat(p1.balance)||0) - amt;
+            p2.balance = (parseFloat(p2.balance)||0) + amt;
+            const ts = Date.now();
+            window.dbState.transactions.push({ id: ts, party: window.currentParty, type: 'PAY', amount: amt, remark: `Trf to ${targetName} ${rem?'- '+rem:''}` });
+            window.dbState.transactions.push({ id: ts+1, party: targetName, type: 'RECV', amount: amt, remark: `Recv from ${window.currentParty} ${rem?'- '+rem:''}` });
+            
+            window.saveData(); hideCurrentBar();
+        };
+
+        window.hideCurrentBar = () => { document.querySelectorAll('.entry-bar').forEach(b => b.classList.remove('active')); editTrxId = null; };
+        window.handleShortcut = (e, id, next) => { if(e.key === 'Enter') { e.preventDefault(); document.getElementById(next).focus(); return; } const k = e.key.toUpperCase(); if(['T','H','Q','P'].includes(k)) { e.preventDefault(); let m = parseInt(e.target.value) || 1; let u = (k==='T'?10000 : k==='H'?1000 : k==='Q'?25000 : 100000); document.getElementById(id).value = m * u; } };
+        window.closeLedger = () => { window.currentParty = null; document.getElementById('view-ledger').style.display = 'none'; };
+        document.addEventListener('keydown', e => { if(e.key === 'Escape') { hideCurrentBar(); closeLedger(); } });
+        setTimeout(() => renderDashboard(), 500);
+    </script>
+</body>
+</html>

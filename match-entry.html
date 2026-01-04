@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <title>CricLedger | MATCH MASTER v3.0 (Double Click Tally)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      const firebaseConfig = { apiKey: "AIzaSyDbbV6yRFMgwceFvVeSNXg90NOZGfwGswQ", authDomain: "cricledger.firebaseapp.com", projectId: "cricledger", storageBucket: "cricledger.firebasestorage.app", messagingSenderId: "181787586646", appId: "1:181787586646:web:2be72001e1610eaf354bf7" };
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      const DB_DOC = doc(db, "master", "data");
+
+      // LOAD DATA & SYNC
+      window.dbState = JSON.parse(localStorage.getItem('CRICPRO_MASTER_DB')) || { teams: [], parties: [], matches: [] };
+      
+      window.saveToCloud = async () => { 
+          localStorage.setItem('CRICPRO_MASTER_DB', JSON.stringify(window.dbState)); 
+          await setDoc(DB_DOC, window.dbState); 
+      };
+      
+      onSnapshot(DB_DOC, (doc) => { 
+          if (doc.exists()) { 
+              window.dbState = doc.data(); 
+              localStorage.setItem('CRICPRO_MASTER_DB', JSON.stringify(window.dbState)); 
+              if(typeof window.refreshDesk === 'function') window.refreshDesk(); 
+          } 
+      });
+    </script>
+    <style>
+        body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; }
+        .main-container { display: flex; flex-direction: column; height: 100vh; padding: 10px; gap: 10px; }
+        
+        .score-board { height: 90px; flex-shrink: 0; background: #020617; border: 1px solid #334155; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .top-entry-bar { height: 85px; flex-shrink: 0; position: relative; z-index: 20; overflow: visible !important; }
+        .content-area { flex: 1; display: grid; grid-template-columns: 1fr 350px; gap: 10px; overflow: hidden; z-index: 10; }
+        .glass-panel { background: #1e293b; border: 1px solid #334151; border-radius: 8px; display: flex; flex-direction: column; }
+        .input-box { background: #020617; border: 1px solid #475569; color: white; font-weight: 700; font-size: 14px; height: 40px; border-radius: 4px; padding: 0 10px; width: 100%; transition: all 0.15s; }
+        .input-box:focus { border-color: #3b82f6; background: #172554; outline: none; }
+        .label-sm { font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        /* BETFAIR COLORS */
+        .bg-lagai { background-color: #A5D8FF !important; color: #000 !important; border-left: 6px solid #1e88e5 !important; } 
+        .bg-khai { background-color: #F8B4CE !important; color: #000 !important; border-left: 6px solid #d81b60 !important; }
+        .bg-tallied { opacity: 0.5; filter: grayscale(100%); }
+
+        .live-table th { background: #0f172a; color: #94a3b8; font-size: 11px; padding: 10px; text-transform: uppercase; position: sticky; top: 0; z-index: 10; letter-spacing: 1px; }
+        .live-table td { padding: 8px 8px; font-size: 14px; font-weight: 800; border-bottom: 1px solid rgba(0,0,0,0.1); text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        .book-row { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #334155; }
+        .book-val.plus { color: #22c55e; } .book-val.minus { color: #ef4444; }
+
+        .suggestion-box { position: absolute; top: 100%; left: 0; width: 100%; background: #1e293b; border: 1px solid #3b82f6; border-top: none; max-height: 250px; overflow-y: auto; z-index: 100; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.8); border-radius: 0 0 8px 8px; }
+        .suggestion-item { padding: 10px 12px; font-size: 13px; font-weight: bold; cursor: pointer; border-bottom: 1px solid #334155; color: #e2e8f0; }
+        .suggestion-item:hover { background: #3b82f6; color: white; }
+
+        .modal-overlay { z-index: 20000 !important; }
+        .modal-box { background: #1e293b; border: 2px solid #facc15; width: 400px; padding: 25px; border-radius: 12px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5); transform: scale(0.9); transition: transform 0.2s ease-out; }
+        .modal-box.show { transform: scale(1); }
+
+        #edit-modal .modal-box { width: 95%; max-width: 900px; padding: 15px; text-align: left; border-color: #3b82f6; }
+        #edit-modal label { margin-bottom: 2px; color: #94a3b8; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+
+        ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-thumb { background: #475569; }
+    </style>
+</head>
+<body onkeydown="handleGlobalEnter(event)" onclick="closeSuggestions()">
+
+    <div id="edit-modal" class="hidden fixed inset-0 bg-black/95 flex items-center justify-center modal-overlay backdrop-blur-sm">
+        <div id="edit-content" class="modal-box bg-slate-900 border-2 border-blue-500">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-1">
+                <h2 class="text-blue-400 font-black text-sm uppercase tracking-widest"><i class="fas fa-edit mr-2"></i> MODIFY ENTRY</h2>
+                <button onclick="document.getElementById('edit-modal').classList.add('hidden')" class="text-slate-500 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <input type="hidden" id="edit-id">
+
+            <div class="flex items-end gap-2 w-full">
+                <div class="flex-[2]">
+                    <label>Team</label>
+                    <select id="edit-team" class="input-box font-bold text-center" data-next="edit-rate"></select>
+                </div>
+                <div class="flex-1">
+                    <label class="text-yellow-400">Rate</label>
+                    <input type="number" id="edit-rate" class="input-box text-center text-yellow-300 font-black" data-next="edit-amt">
+                </div>
+                <div class="flex-[1.5]">
+                    <label>Amount</label>
+                    <input type="number" id="edit-amt" class="input-box text-center font-bold" data-next="edit-mode">
+                </div>
+                <div class="flex-1">
+                    <label>Mode</label>
+                    <select id="edit-mode" class="input-box text-center font-bold" data-next="edit-party">
+                        <option value="L" class="text-blue-400">LAGAI</option>
+                        <option value="K" class="text-pink-400">KHAI</option>
+                    </select>
+                </div>
+                <div class="flex-[2] relative">
+                    <label>Party Name</label>
+                    <input type="text" id="edit-party" class="input-box uppercase font-bold text-yellow-400" autocomplete="off">
+                </div>
+                
+                <button onclick="confirmDeleteBet()" class="bg-red-900/50 hover:bg-red-600 border border-red-800 text-red-200 hover:text-white h-[40px] px-4 rounded font-bold"><i class="fas fa-trash"></i></button>
+                <button id="btn-update" onclick="confirmUpdateBet()" class="bg-blue-600 hover:bg-blue-500 text-white h-[40px] px-6 rounded font-black text-sm uppercase shadow-lg border border-blue-400">UPDATE</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="declare-modal" class="hidden fixed inset-0 bg-black/90 flex items-center justify-center modal-overlay backdrop-blur-sm">
+        <div id="declare-content" class="modal-box">
+            <div class="text-yellow-400 text-5xl mb-4"><i class="fas fa-trophy"></i></div>
+            <h2 class="text-white font-black text-xl uppercase tracking-widest mb-1">DECLARE WINNER</h2>
+            <div class="h-1 w-20 bg-yellow-500 mx-auto mb-4 rounded"></div>
+            <p class="text-slate-300 text-xs font-bold mb-2">SELECT WINNER:</p>
+            <select id="win-team-select" class="w-full bg-slate-900 border border-slate-600 text-white font-bold p-2 rounded mb-4 text-center uppercase"></select>
+            <p class="text-green-400 text-[10px] font-bold mb-6 bg-green-900/20 p-2 rounded border border-green-900"><i class="fas fa-percentage mr-1"></i> Commission will be ADDED on Losing Entries.</p>
+            <div class="flex gap-3">
+                <button onclick="document.getElementById('declare-modal').classList.add('hidden')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded uppercase text-xs tracking-wider">CANCEL</button>
+                <button onclick="finalizeMatch()" class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded uppercase text-xs tracking-wider shadow-lg shadow-green-500/30">DECLARE</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="success-modal" class="hidden fixed inset-0 bg-black/90 flex items-center justify-center modal-overlay backdrop-blur-sm">
+        <div id="success-content" class="modal-box border-green-500">
+            <div class="text-green-400 text-5xl mb-4"><i class="fas fa-check-circle"></i></div>
+            <h2 class="text-white font-black text-xl uppercase tracking-widest mb-4">SUCCESS</h2>
+            <button onclick="location.reload()" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded uppercase text-xs tracking-wider">OK</button>
+        </div>
+    </div>
+
+    <div id="match-modal" class="fixed inset-0 bg-black/90 flex items-center justify-center" style="z-index:15000;">
+        <div class="bg-slate-800 p-6 rounded border border-blue-500 w-80 text-center">
+            <h2 class="text-blue-400 font-black mb-4">OPEN MATCH DESK</h2>
+            <select id="match-selector" class="input-box mb-4 text-center"></select>
+            <button onclick="selectMatch()" class="bg-blue-600 text-white font-bold w-full py-2 rounded">ENTER MATCH</button>
+        </div>
+    </div>
+
+    <div id="main-desk" class="hidden main-container">
+        <div class="score-board">
+            <div class="flex items-center gap-4">
+                <div><div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">ADMIN NET P/L</div><div class="text-xl font-black italic text-white" id="match-title">...</div></div>
+                <button onclick="openTallyBook()" class="bg-yellow-600 hover:bg-yellow-500 text-white font-bold px-4 py-2 rounded text-xs uppercase shadow-lg border border-yellow-400"><i class="fas fa-list-alt mr-1"></i> TALLY</button>
+                <button onclick="openDeclare()" class="bg-red-600 hover:bg-red-500 text-white font-bold px-4 py-2 rounded text-xs uppercase shadow-lg border border-red-400 animate-pulse"><i class="fas fa-gavel mr-1"></i> DECLARE</button>
+            </div>
+            <div class="flex gap-16 pr-8">
+                <div class="text-right">
+                    <div class="text-sm text-slate-400 font-black mb-1 uppercase tracking-wider" id="lbl-t1">TEAM A</div>
+                    <div id="sc-t1" class="text-5xl font-black text-white leading-none drop-shadow-lg">0</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-sm text-slate-400 font-black mb-1 uppercase tracking-wider" id="lbl-t2">TEAM B</div>
+                    <div id="sc-t2" class="text-5xl font-black text-white leading-none drop-shadow-lg">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel top-entry-bar border-t-4 border-blue-500 p-3" style="overflow: visible;">
+            <div class="flex items-end gap-2 h-full">
+                <div class="input-group flex-[2]"><label class="label-sm text-cyan-400">Team</label><select id="m-team" class="input-box font-bold text-center" data-next="m-rate"></select></div>
+                <div class="input-group flex-1"><label class="label-sm text-yellow-400">1. Rate</label><input type="number" id="m-rate" class="input-box text-center text-yellow-300 font-black" data-next="m-amt" placeholder="0.00"></div>
+                <div class="input-group flex-[1.5]"><label class="label-sm text-white">2. Amount (Q=25k)</label><input type="text" id="m-amt" onkeyup="hS(this)" class="input-box text-center font-bold" data-next="m-mode" placeholder="0"></div>
+                <div class="input-group flex-1"><label class="label-sm text-white">3. L / K</label><select id="m-mode" class="input-box text-center font-bold" data-next="m-party"><option value="L" class="text-blue-400">LAGAI</option><option value="K" class="text-pink-400">KHAI</option></select></div>
+                <div class="input-group flex-[2] relative"><label class="label-sm text-slate-400">4. Party Name</label><input type="text" id="m-party" class="input-box font-bold text-yellow-400" placeholder="Type name..." oninput="searchParty(this)" autocomplete="off"><div id="suggestion-box" class="suggestion-box"></div></div>
+                <button id="btn-save" onclick="addMatchBet()" class="bg-blue-600 hover:bg-blue-500 text-white h-[40px] px-6 rounded font-black text-sm uppercase shadow-lg border border-blue-400">SAVE</button>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="glass-panel">
+                <div class="bg-slate-800 p-2 border-b border-slate-700 font-bold text-xs text-center text-slate-300">MATCH BETS (DOUBLE CLICK TO EDIT)</div>
+                <div class="overflow-y-auto flex-1 bg-white/5">
+                    <table class="w-full text-center live-table"><thead><tr><th>RATE</th><th>AMT</th><th>L / K</th><th>PARTY</th><th>TEAM</th><th>DATE / TIME</th></tr></thead><tbody id="match-logs"></tbody></table>
+                </div>
+            </div>
+            <div class="glass-panel border-t-4 border-yellow-500 flex flex-col">
+                <div class="p-2 bg-slate-900 text-center text-[10px] font-black text-yellow-400 border-b border-slate-800 uppercase tracking-wider">PARTY BOOK (DOUBLE CLICK TO TALLY)</div>
+                <div class="flex-1 overflow-y-auto bg-slate-950 p-2" id="book-body"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tally-modal" class="hidden fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" style="z-index: 12000;">
+        <div class="bg-slate-900 border-2 border-yellow-500 w-full max-w-5xl h-[90vh] rounded-xl shadow-2xl flex flex-col relative">
+            <div class="bg-slate-800 p-3 flex justify-between items-center border-b border-slate-700">
+                <span class="text-yellow-400 font-black uppercase tracking-widest text-lg">TALLY BOOK (RAW)</span>
+                <button onclick="document.getElementById('tally-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 bg-slate-950 border-b-2 border-yellow-600/30">
+                <table class="w-full text-center tally-table"><thead class="bg-slate-800 text-yellow-400 sticky top-0"><tr><th>NO</th><th>PARTY</th><th id="th-t1">TEAM A</th><th id="th-t2">TEAM B</th><th>DONE</th></tr></thead><tbody id="tally-body-pending"></tbody></table>
+            </div>
+            <div class="h-1/3 overflow-y-auto p-4 bg-slate-900/50"><table class="w-full text-center tally-table"><tbody id="tally-body-done" class="opacity-75"></tbody></table></div>
+        </div>
+    </div>
+
+    <div id="party-detail-modal" class="hidden fixed inset-0 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm" style="z-index: 13000;">
+        <div class="bg-slate-900 border-2 border-cyan-500 w-full max-w-3xl h-[70vh] rounded-xl shadow-2xl flex flex-col">
+            <div class="bg-slate-800 p-3 flex justify-between items-center border-b border-slate-700">
+                <span class="text-cyan-400 font-black uppercase tracking-widest text-lg" id="detail-title">PARTY DETAILS</span>
+                <button onclick="document.getElementById('party-detail-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 bg-slate-950">
+                <table class="w-full text-center live-table"><thead><tr><th>CHK</th><th>RATE</th><th>AMT</th><th>MODE</th><th>TEAM</th><th>TIME</th></tr></thead><tbody id="party-detail-body"></tbody></table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let curMatch = null;
+
+        // INIT DB
+        function init() {
+            if(!window.dbState.matches) window.dbState.matches = [];
+            const active = window.dbState.matches.filter(m => m.status !== 'DECLARED').reverse();
+            document.getElementById('match-selector').innerHTML = active.map(m => `<option value="${m.id}">${m.t1} vs ${m.t2}</option>`).join('');
+        }
+        setTimeout(init, 1000);
+
+        window.selectMatch = () => {
+            const id = parseInt(document.getElementById('match-selector').value);
+            curMatch = window.dbState.matches.find(m => m.id === id);
+            if(curMatch) {
+                if(!curMatch.bets) curMatch.bets = [];
+                document.getElementById('match-modal').classList.add('hidden');
+                document.getElementById('main-desk').classList.remove('hidden');
+                document.getElementById('match-title').innerText = `${curMatch.t1} vs ${curMatch.t2}`;
+                document.getElementById('lbl-t1').innerText = curMatch.t1;
+                document.getElementById('lbl-t2').innerText = curMatch.t2;
+                document.getElementById('m-team').innerHTML = `<option value="${curMatch.t1}">${curMatch.t1}</option><option value="${curMatch.t2}">${curMatch.t2}</option>`;
+                refreshDesk();
+            }
+        };
+
+        // --- CORE LOGIC ---
+        function calculatePartyResult(bets, partyName, winnerTeam) {
+            let pData = window.dbState.parties.find(p => p.name === partyName) || {};
+            let commRate = parseFloat(pData.comm) || 0;
+            let share = (parseFloat(pData.shr) || 0) + (parseFloat(pData.thirdShr1) || 0) + (parseFloat(pData.thirdShr2) || 0);
+            
+            let rawTotal = 0;
+            let minusEntryTurnover = 0; 
+
+            bets.forEach(b => {
+                let winAmt = b.amt * b.rate;
+                let riskAmt = parseFloat(b.amt);
+                let entryPL = 0;
+
+                if (winnerTeam === "DRAW") {
+                    entryPL = 0;
+                } else {
+                    if(b.mode === 'L') {
+                        entryPL = (b.team === winnerTeam) ? winAmt : -riskAmt;
+                    } else {
+                        entryPL = (b.team === winnerTeam) ? -winAmt : riskAmt;
+                    }
+                }
+                
+                if (entryPL < 0) {
+                    minusEntryTurnover += Math.abs(entryPL);
+                }
+
+                rawTotal += entryPL;
+            });
+
+            let commissionAmt = (minusEntryTurnover * commRate) / 100;
+            let totalBeforeShare = rawTotal + commissionAmt;
+            let finalAmt = totalBeforeShare * (1 - (share / 100));
+
+            return { total: finalAmt, raw: rawTotal, comm: commissionAmt };
+        }
+
+        // --- GLOBAL ENTER KEY HANDLER ---
+        function handleGlobalEnter(e) { 
+            if(e.key === 'Enter') {
+                const target = e.target;
+                
+                if(target.id === 'edit-party') {
+                    e.preventDefault();
+                    confirmUpdateBet();
+                    return;
+                }
+
+                if(target.id === 'm-party') { 
+                    const box = document.getElementById('suggestion-box'); 
+                    if(box.style.display === 'block' && box.firstChild) { 
+                        box.firstChild.click(); 
+                    } else { 
+                        target.value = target.value.toUpperCase(); 
+                        addMatchBet(); 
+                    }
+                    e.preventDefault();
+                    return;
+                } 
+
+                if(target.dataset.next) { 
+                    e.preventDefault(); 
+                    document.getElementById(target.dataset.next).focus(); 
+                } 
+            } 
+        }
+
+        // --- ADD BET ---
+        window.addMatchBet = async () => {
+            const team = document.getElementById('m-team').value;
+            const rate = parseFloat(document.getElementById('m-rate').value);
+            const amt = parseFloat(document.getElementById('m-amt').value);
+            const mode = document.getElementById('m-mode').value;
+            const party = document.getElementById('m-party').value.toUpperCase();
+            if(!party) return alert("ENTER PARTY");
+            if(isNaN(rate) || isNaN(amt)) return alert("CHECK VALUES");
+            
+            const bet = { id: Date.now(), type: 'MATCH', team, rate, amt, mode, party, time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit' }), isTallied: false };
+            curMatch.bets.push(bet); 
+            
+            const mIndex = window.dbState.matches.findIndex(m => m.id === curMatch.id);
+            if(mIndex > -1) window.dbState.matches[mIndex] = curMatch;
+            
+            await window.saveToCloud(); 
+            document.getElementById('m-amt').value = ''; document.getElementById('m-party').value = ''; document.getElementById('m-rate').focus();
+            refreshDesk();
+        };
+
+        // --- EDIT / DELETE LOGIC ---
+        window.openEditModal = (id) => {
+            const bet = curMatch.bets.find(b => b.id === id);
+            if(!bet) return;
+            document.getElementById('edit-id').value = bet.id;
+            document.getElementById('edit-team').innerHTML = `<option value="${curMatch.t1}">${curMatch.t1}</option><option value="${curMatch.t2}">${curMatch.t2}</option>`;
+            document.getElementById('edit-team').value = bet.team;
+            document.getElementById('edit-rate').value = bet.rate;
+            document.getElementById('edit-amt').value = bet.amt;
+            document.getElementById('edit-mode').value = bet.mode;
+            document.getElementById('edit-party').value = bet.party;
+            document.getElementById('edit-modal').classList.remove('hidden');
+            setTimeout(() => { document.getElementById('edit-content').classList.add('show'); document.getElementById('edit-team').focus(); }, 10);
+        };
+
+        window.confirmUpdateBet = async () => {
+            const id = parseInt(document.getElementById('edit-id').value);
+            const bet = curMatch.bets.find(b => b.id === id);
+            if(!bet) return;
+
+            bet.team = document.getElementById('edit-team').value;
+            bet.rate = parseFloat(document.getElementById('edit-rate').value) || 0; // Fix NaN crash
+            bet.amt = parseFloat(document.getElementById('edit-amt').value) || 0; // Fix NaN crash
+            bet.mode = document.getElementById('edit-mode').value;
+            bet.party = document.getElementById('edit-party').value.toUpperCase();
+            bet.editTime = new Date().toLocaleString('en-IN', { hour: '2-digit', minute:'2-digit', second: '2-digit' });
+
+            const mIndex = window.dbState.matches.findIndex(m => m.id === curMatch.id);
+            if(mIndex > -1) window.dbState.matches[mIndex] = curMatch;
+
+            await window.saveToCloud();
+            document.getElementById('edit-modal').classList.add('hidden');
+            refreshDesk();
+        };
+
+        window.confirmDeleteBet = async () => {
+            if(!confirm("Are you sure you want to DELETE this entry?")) return;
+            const id = parseInt(document.getElementById('edit-id').value);
+            curMatch.bets = curMatch.bets.filter(b => b.id !== id);
+            const mIndex = window.dbState.matches.findIndex(m => m.id === curMatch.id);
+            if(mIndex > -1) window.dbState.matches[mIndex] = curMatch;
+            await window.saveToCloud();
+            document.getElementById('edit-modal').classList.add('hidden');
+            refreshDesk();
+        };
+
+        // --- TALLY BOOK LOGIC (FIXED) ---
+        window.openTallyBook = () => { 
+            let pendingHTML = '', doneHTML = ''; let pIdx = 1, dIdx = 1; 
+            document.getElementById('th-t1').innerText = curMatch.t1; 
+            document.getElementById('th-t2').innerText = curMatch.t2; 
+            
+            const parties = [...new Set(curMatch.bets.map(b => b.party))].sort(); 
+            
+            parties.forEach(pName => { 
+                let bets = curMatch.bets.filter(b => b.party === pName); 
+                let isFullyTallied = bets.every(b => b.isTallied); 
+                
+                let resT1 = calculatePartyResult(bets, pName, curMatch.t1);
+                let resT2 = calculatePartyResult(bets, pName, curMatch.t2);
+
+                const row = `<tr class="tally-row border-b border-slate-700" ondblclick="openPartyDetail('${pName}')"><td class="p-2 text-slate-500">${isFullyTallied ? dIdx++ : pIdx++}</td><td class="p-2 text-left text-white font-bold">${pName}</td><td class="p-2 font-bold ${resT1.raw>=0?'text-green-400':'text-red-400'}">${Math.round(resT1.raw)}</td><td class="p-2 font-bold ${resT2.raw>=0?'text-green-400':'text-red-400'}">${Math.round(resT2.raw)}</td><td class="p-2"><input type="checkbox" class="w-5 h-5 accent-green-500" ${isFullyTallied?'checked':''} onclick="event.stopPropagation(); togglePartyMaster('${pName}')"></td></tr>`; 
+                if(isFullyTallied) doneHTML += row; else pendingHTML += row; 
+            }); 
+            
+            document.getElementById('tally-body-pending').innerHTML = pendingHTML; 
+            document.getElementById('tally-body-done').innerHTML = doneHTML; 
+            document.getElementById('tally-modal').classList.remove('hidden'); 
+        };
+
+        window.toggleBetTally = (id) => { const b = curMatch.bets.find(x => x.id === id); if(b) { b.isTallied = !b.isTallied; window.saveToCloud(); } };
+        window.togglePartyMaster = (pName) => { const all = curMatch.bets.filter(b => b.party === pName); const newState = !all.every(b => b.isTallied); all.forEach(b => b.isTallied = newState); window.saveToCloud(); openTallyBook(); };
+        window.openPartyDetail = (pName) => { document.getElementById('detail-title').innerText = `${pName} - BETS`; const pBets = curMatch.bets.filter(b => b.party === pName).sort((a,b)=>b.id-a.id); document.getElementById('party-detail-body').innerHTML = pBets.map(b => { const cls = b.isTallied ? 'bg-tallied' : (b.mode==='L'?'bg-lagai':'bg-khai'); return `<tr class="${cls}"><td><input type="checkbox" onchange="toggleBetTally(${b.id})" ${b.isTallied?'checked':''} class="w-4 h-4 accent-green-500"></td><td>${b.rate}</td><td>${b.amt}</td><td>${b.mode}</td><td>${b.team}</td><td class="text-[10px]">${b.time}</td></tr>`; }).join(''); document.getElementById('party-detail-modal').classList.remove('hidden'); };
+
+        window.openDeclare = () => {
+            document.getElementById('win-team-select').innerHTML = `
+                <option value="${curMatch.t1}">${curMatch.t1}</option>
+                <option value="${curMatch.t2}">${curMatch.t2}</option>
+                <option value="DRAW">DRAW / TIE</option>
+            `;
+            document.getElementById('declare-modal').classList.remove('hidden');
+        };
+
+        window.finalizeMatch = async () => {
+            const winner = document.getElementById('win-team-select').value;
+            let pMap = {};
+            window.dbState.parties.forEach(p => { 
+                pMap[p.name] = { name: p.name, finalAmount: 0, oldBal: parseFloat(p.balance) || 0 }; 
+            });
+
+            const parties = [...new Set(curMatch.bets.map(b => b.party))];
+            parties.forEach(pName => {
+                if(!pMap[pName]) return;
+                const pBets = curMatch.bets.filter(b => b.party === pName);
+                const res = calculatePartyResult(pBets, pName, winner);
+                pMap[pName].finalAmount += res.total;
+            });
+
+            let updatedParties = window.dbState.parties.map(p => {
+                if(pMap[p.name]) { p.balance = pMap[p.name].oldBal + pMap[p.name].finalAmount; }
+                return p;
+            });
+            window.dbState.parties = updatedParties;
+            curMatch.status = 'DECLARED';
+            curMatch.winner = winner;
+            await window.saveToCloud();
+            document.getElementById('declare-modal').classList.add('hidden');
+            document.getElementById('success-modal').classList.remove('hidden');
+        };
+
+        function hS(e) { let v = e.value.toLowerCase(); if(v.includes('q')) { e.value = 25000; return; } let n = parseFloat(v) || 1; if(v.endsWith('h')) e.value = n * 1000; else if(v.endsWith('t')) e.value = n * 10000; else if(v.endsWith('p')) e.value = n * 100000; }
+        
+        window.searchParty = (input) => {
+            const val = input.value.toUpperCase(); const box = document.getElementById('suggestion-box');
+            if(val.length === 0) { box.style.display = 'none'; return; }
+            const matches = window.dbState.parties.filter(p => p.name.startsWith(val)).sort((a,b) => a.name.localeCompare(b.name));
+            if(matches.length > 0) { box.innerHTML = matches.map(p => `<div class="suggestion-item" onclick="selectParty('${p.name}')">${p.name}</div>`).join(''); box.style.display = 'block'; } else { box.style.display = 'none'; }
+        };
+        window.selectParty = (name) => { document.getElementById('m-party').value = name.toUpperCase(); document.getElementById('suggestion-box').style.display = 'none'; document.getElementById('btn-save').focus(); };
+        window.closeSuggestions = () => { setTimeout(() => document.getElementById('suggestion-box').style.display = 'none', 200); };
+        
+        window.refreshDesk = () => { 
+            if(!curMatch) return; 
+            const logs = [...curMatch.bets].sort((a,b)=>b.id-a.id); 
+            
+            document.getElementById('match-logs').innerHTML = logs.map(l => { 
+                // Betfair Logic: Back(Blue), Lay(Pink)
+                // Need Dark Text on Light Background
+                const baseCls = l.mode === 'L' ? 'bg-lagai text-slate-900' : 'bg-khai text-slate-900'; 
+                const cls = l.isTallied ? 'bg-tallied' : baseCls; 
+                let timeDisplay = l.time;
+                if(l.editTime) timeDisplay += `<br><span class="text-slate-600 text-[9px] tracking-tight">(Ed: ${l.editTime})</span>`;
+                
+                // Color overrides for text visibility on light background
+                const rateColor = l.isTallied ? 'text-gray-400' : 'text-black';
+                const amtColor = l.isTallied ? 'text-gray-400' : 'text-black';
+                const modeColor = l.mode==='L' ? 'text-blue-900' : 'text-pink-900';
+
+                return `<tr class="${cls} hover:brightness-110 transition-all cursor-pointer border-b border-black/10" ondblclick="openEditModal(${l.id})">
+                    <td class="${rateColor} text-sm font-black">${l.rate}</td>
+                    <td class="${amtColor} text-sm font-black">${l.amt}</td>
+                    <td class="${modeColor} font-black uppercase">${l.mode==='L'?'LAGAI':'KHAI'}</td>
+                    <td class="text-slate-800 font-bold uppercase tracking-wide">${l.party}</td>
+                    <td class="text-slate-700 font-bold text-xs">${l.team}</td>
+                    <td class="text-slate-600 text-[10px] font-bold leading-tight">${timeDisplay}</td>
+                </tr>`; 
+            }).join(''); 
+            
+            let adminNetT1 = 0, adminNetT2 = 0;
+            const parties = [...new Set(curMatch.bets.map(b => b.party))];
+            
+            let html = '';
+            parties.forEach(pName => {
+                 let bets = curMatch.bets.filter(b => b.party === pName);
+                 let resT1 = calculatePartyResult(bets, pName, curMatch.t1);
+                 let resT2 = calculatePartyResult(bets, pName, curMatch.t2);
+                 
+                 adminNetT1 += (-resT1.total);
+                 adminNetT2 += (-resT2.total);
+
+                 let showT1 = resT1.raw;
+                 let showT2 = resT2.raw;
+
+                 if(Math.abs(showT1) > 1 || Math.abs(showT2) > 1) {
+                     // EDITED: Added ondblclick="openPartyDetail" to the row and cursor-pointer class
+                     html += `<div class="book-row cursor-pointer hover:bg-slate-800 transition-colors select-none" ondblclick="openPartyDetail('${pName}')" title="Double click to Tally">
+                        <span class="text-white font-bold text-xs w-1/3 flex items-center gap-2"><i class="fas fa-hand-pointer text-[10px] opacity-0 group-hover:opacity-100 text-slate-500"></i> ${pName}</span>
+                        <span class="book-val w-1/3 text-center ${showT1>=0?'plus':'minus'}">${Math.round(showT1)}</span>
+                        <span class="book-val w-1/3 text-center ${showT2>=0?'plus':'minus'}">${Math.round(showT2)}</span>
+                     </div>`;
+                 }
+            });
+
+            document.getElementById('book-body').innerHTML = html; 
+            document.getElementById('sc-t1').innerText = Math.round(adminNetT1); 
+            document.getElementById('sc-t1').className = `text-5xl font-black leading-none drop-shadow-lg ${adminNetT1>=0?'text-green-500':'text-red-500'}`; 
+            document.getElementById('sc-t2').innerText = Math.round(adminNetT2); 
+            document.getElementById('sc-t2').className = `text-5xl font-black leading-none drop-shadow-lg ${adminNetT2>=0?'text-green-500':'text-red-500'}`; 
+        };
+    </script>
+</body>
+</html>

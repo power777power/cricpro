@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <title>CricLedger Pro | PARTY MASTER v5.1 (Final)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      const firebaseConfig = { apiKey: "AIzaSyDbbV6yRFMgwceFvVeSNXg90NOZGfwGswQ", authDomain: "cricledger.firebaseapp.com", projectId: "cricledger", storageBucket: "cricledger.firebasestorage.app", messagingSenderId: "181787586646", appId: "1:181787586646:web:2be72001e1610eaf354bf7" };
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      const DB_DOC = doc(db, "master", "data");
+
+      window.dbState = JSON.parse(localStorage.getItem('CRICPRO_MASTER_DB')) || { teams: [], parties: [], matches: [] };
+      window.saveToCloud = async () => { localStorage.setItem('CRICPRO_MASTER_DB', JSON.stringify(window.dbState)); await setDoc(DB_DOC, window.dbState); };
+      
+      onSnapshot(DB_DOC, (doc) => { 
+          if (doc.exists()) { 
+              window.dbState = doc.data(); 
+              if(typeof window.refreshParties === 'function') window.refreshParties(); 
+          } 
+      });
+    </script>
+    <style>
+        body { background: linear-gradient(135deg, #020617 0%, #0f172a 100%); color: #e2e8f0; font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; }
+        
+        .main-grid { display: grid; grid-template-columns: 1fr 280px; gap: 20px; height: 90vh; padding: 20px; }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+
+        .input-group label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; display: block; color: #94a3b8; }
+        input, select {
+            background: rgba(2, 6, 23, 0.6) !important;
+            color: #f8fafc !important;
+            border: 1px solid #334155 !important;
+            font-size: 13px; height: 38px; font-weight: 700; padding: 0 10px; border-radius: 6px; width: 100%;
+        }
+        input:focus, select:focus { border-color: #38bdf8 !important; outline: none; box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); }
+
+        .border-sess input:focus { border-color: #4ade80 !important; }
+        .border-match input:focus { border-color: #60a5fa !important; }
+        .border-self input:focus { border-color: #facc15 !important; }
+
+        .party-item {
+            padding: 12px; border-bottom: 1px solid #334155; cursor: pointer; transition: all 0.2s;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .party-item:hover { background: #1e293b; padding-left: 16px; border-left: 3px solid #facc15; }
+        .party-item.active { background: #1e3a8a; border-left: 3px solid #60a5fa; }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+        .btn-action { font-weight: 900; text-transform: uppercase; letter-spacing: 1px; border-radius: 6px; transition: 0.2s; }
+        .btn-action:active { transform: scale(0.95); }
+    </style>
+</head>
+<body onkeydown="handleGlobalEnter(event)">
+
+    <div class="h-[10vh] border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50">
+        <div>
+            <h1 class="text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
+                PARTY<span class="text-white">MASTER</span>
+            </h1>
+            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">v5.1 Pro Edition</span>
+        </div>
+        <div class="text-right">
+            <span class="text-green-500 text-[10px] font-bold bg-green-900/20 px-2 py-1 rounded border border-green-900"><i class="fas fa-circle text-[8px] mr-1"></i> ONLINE SYNC</span>
+        </div>
+    </div>
+
+    <div class="main-grid">
+        
+        <div class="glass-panel p-6 overflow-y-auto">
+            <div class="flex justify-between items-center mb-6 pb-2 border-b border-slate-700">
+                <span class="text-white font-bold uppercase tracking-wider flex items-center gap-2">
+                    <i class="fas fa-user-edit text-cyan-400"></i> Party Details
+                </span>
+                
+                <button onclick="resetForm()" class="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white text-xs font-black px-6 py-2 rounded-full shadow-lg shadow-emerald-500/20 transform transition hover:scale-105 active:scale-95 flex items-center gap-2 border border-emerald-400/30">
+                    <i class="fas fa-plus text-sm"></i> ADD PARTY
+                </button>
+
+            </div>
+
+            <div class="grid grid-cols-4 gap-5">
+                <div class="col-span-2 space-y-4">
+                    <div class="input-group">
+                        <label class="text-white">1. Party Name (Unique)</label>
+                        <input type="text" id="p-name" class="enter-nav uppercase border-l-4 border-l-white" data-next="p-s-comm" placeholder="ENTER NAME">
+                    </div>
+                </div>
+                <div class="col-span-1 space-y-4">
+                    <div class="input-group">
+                        <label>Phone</label>
+                        <input type="number" id="p-phone" class="enter-nav" data-next="p-limit">
+                    </div>
+                </div>
+                <div class="col-span-1 space-y-4">
+                    <div class="input-group">
+                        <label>Limit</label>
+                        <input type="number" id="p-limit" class="enter-nav" data-next="btn-save">
+                    </div>
+                </div>
+
+                <div class="input-group border-sess col-span-1">
+                    <label class="text-green-400">2. Sess Comm %</label>
+                    <input type="number" id="p-s-comm" class="enter-nav" data-next="p-comm">
+                </div>
+                <div class="input-group border-match col-span-1">
+                    <label class="text-blue-400">3. Match Comm %</label>
+                    <input type="number" id="p-comm" class="enter-nav" data-next="p-shr">
+                </div>
+                <div class="input-group border-self col-span-1">
+                    <label class="text-yellow-400">4. Self Patti %</label>
+                    <input type="number" id="p-shr" class="enter-nav" data-next="p-3rd-shr-1">
+                </div>
+                 <div class="input-group col-span-1">
+                    <label class="text-pink-400">7. Method</label>
+                    <select id="p-method" class="enter-nav" data-next="p-phone">
+                        <option value="LK">MATCH (L/K)</option>
+                        <option value="NET">NET LOSS</option>
+                    </select>
+                </div>
+
+                <div class="col-span-4 bg-slate-800/50 p-4 rounded border border-slate-700 relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-20 h-20 bg-orange-500/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+                    <label class="text-orange-400 text-xs font-black uppercase mb-3 block relative z-10">3rd PARTY PATTI</label>
+                    <div class="grid grid-cols-2 gap-6 relative z-10">
+                        <div class="flex gap-2">
+                            <div class="w-1/3"><label class="text-[9px] mb-1 block">5. Share A %</label><input type="number" id="p-3rd-shr-1" class="enter-nav" data-next="p-3rd-to-1"></div>
+                            <div class="w-2/3"><label class="text-[9px] mb-1 block">Forward To</label><select id="p-3rd-to-1" class="enter-nav text-[11px]" data-next="p-3rd-shr-2"></select></div>
+                        </div>
+                        <div class="flex gap-2">
+                            <div class="w-1/3"><label class="text-[9px] mb-1 block">6. Share B %</label><input type="number" id="p-3rd-shr-2" class="enter-nav" data-next="p-3rd-to-2"></div>
+                            <div class="w-2/3"><label class="text-[9px] mb-1 block">Forward To</label><select id="p-3rd-to-2" class="enter-nav text-[11px]" data-next="p-method"></select></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-auto pt-6 flex gap-3">
+                <button id="btn-save" onclick="saveParty()" class="btn-action flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 shadow-lg shadow-blue-500/20">
+                    <i class="fas fa-save mr-2"></i> SAVE / UPDATE
+                </button>
+                <button onclick="deleteCurrentParty()" class="btn-action w-1/4 bg-red-900/50 hover:bg-red-600 text-red-200 hover:text-white border border-red-800">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="glass-panel">
+            <div class="p-3 border-b border-slate-700 bg-slate-900/80">
+                <div class="relative">
+                    <i class="fas fa-search absolute left-3 top-3 text-slate-500 text-xs"></i>
+                    <input type="text" id="search-box" onkeyup="renderSideList()" placeholder="SEARCH PARTY..." class="pl-8 uppercase text-xs !bg-slate-800 !border-slate-600 rounded-full">
+                </div>
+            </div>
+            <div id="side-list" class="flex-1 overflow-y-auto">
+                </div>
+            <div class="p-2 bg-slate-900 text-center text-[9px] text-slate-500 font-bold border-t border-slate-800">
+                TOTAL: <span id="total-count" class="text-white">0</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function handleGlobalEnter(e) {
+            if (e.key === 'Enter') {
+                const target = e.target;
+                if (target.classList.contains('enter-nav')) {
+                    e.preventDefault();
+                    const nextId = target.getAttribute('data-next');
+                    const nextEl = document.getElementById(nextId);
+                    if (nextEl) {
+                        if (nextEl.tagName === 'BUTTON') nextEl.click();
+                        else nextEl.focus();
+                    }
+                }
+            }
+        }
+
+        let currentSelection = null;
+
+        window.refreshParties = () => {
+            renderSideList();
+            updateDropdowns();
+        };
+
+        function updateDropdowns() {
+            const list = window.dbState.parties.sort((a,b) => a.name.localeCompare(b.name));
+            const opt = `<option value="NONE">-- NO FORWARD --</option>` + list.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+            if(document.activeElement.id !== 'p-3rd-to-1') document.getElementById('p-3rd-to-1').innerHTML = opt;
+            if(document.activeElement.id !== 'p-3rd-to-2') document.getElementById('p-3rd-to-2').innerHTML = opt;
+        }
+
+        function renderSideList() {
+            const query = document.getElementById('search-box').value.toUpperCase();
+            const list = window.dbState.parties.sort((a,b) => a.name.localeCompare(b.name));
+            const filtered = list.filter(p => p.name.includes(query));
+            
+            document.getElementById('total-count').innerText = filtered.length;
+            
+            document.getElementById('side-list').innerHTML = filtered.map(p => `
+                <div onclick="loadParty('${p.name}')" class="party-item ${currentSelection === p.name ? 'active' : ''}">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-xs text-white">${p.name}</span>
+                        <div class="flex gap-1 mt-1">
+                             <span class="text-[8px] bg-slate-800 px-1 rounded text-slate-400">${p.phone || 'NO PH'}</span>
+                             ${p.shr > 0 ? '<span class="text-[8px] bg-yellow-900/30 text-yellow-500 px-1 rounded">SELF</span>' : ''}
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right text-[10px] text-slate-600"></i>
+                </div>
+            `).join('');
+        }
+
+        window.loadParty = (name) => {
+            currentSelection = name;
+            const p = window.dbState.parties.find(x => x.name === name);
+            if(!p) return;
+
+            document.getElementById('p-name').value = p.name;
+            document.getElementById('p-phone').value = p.phone || '';
+            document.getElementById('p-limit').value = p.limit || '';
+            document.getElementById('p-s-comm').value = p.sComm || '';
+            document.getElementById('p-comm').value = p.comm || '';
+            document.getElementById('p-shr').value = p.shr || '';
+            document.getElementById('p-3rd-shr-1').value = p.thirdShr1 || '';
+            document.getElementById('p-3rd-shr-2').value = p.thirdShr2 || '';
+            
+            updateDropdowns();
+            document.getElementById('p-3rd-to-1').value = p.forwardTo1 || 'NONE';
+            document.getElementById('p-3rd-to-2').value = p.forwardTo2 || 'NONE';
+            document.getElementById('p-method').value = p.commMethod || 'LK';
+
+            renderSideList();
+        };
+
+        window.resetForm = () => {
+            currentSelection = null;
+            document.querySelectorAll('input').forEach(i => i.value = '');
+            document.getElementById('p-3rd-to-1').value = 'NONE';
+            document.getElementById('p-3rd-to-2').value = 'NONE';
+            document.getElementById('p-name').focus();
+            renderSideList();
+        };
+
+        window.saveParty = () => {
+            let n = document.getElementById('p-name').value.toUpperCase().trim();
+            if(!n) return alert("NAME REQUIRED!");
+            
+            let existingIndex = window.dbState.parties.findIndex(p => p.name === n);
+            
+            const newObj = {
+                name: n,
+                sComm: parseFloat(document.getElementById('p-s-comm').value) || 0,
+                comm: parseFloat(document.getElementById('p-comm').value) || 0,
+                shr: parseFloat(document.getElementById('p-shr').value) || 0,
+                thirdShr1: parseFloat(document.getElementById('p-3rd-shr-1').value) || 0,
+                forwardTo1: document.getElementById('p-3rd-to-1').value,
+                thirdShr2: parseFloat(document.getElementById('p-3rd-shr-2').value) || 0,
+                forwardTo2: document.getElementById('p-3rd-to-2').value,
+                commMethod: document.getElementById('p-method').value,
+                phone: document.getElementById('p-phone').value,
+                limit: document.getElementById('p-limit').value
+            };
+
+            if(existingIndex >= 0) window.dbState.parties[existingIndex] = newObj;
+            else window.dbState.parties.push(newObj);
+
+            window.saveToCloud();
+            currentSelection = n;
+            renderSideList();
+            // Visual feedback
+            const btn = document.getElementById('btn-save');
+            const origText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i> SAVED';
+            setTimeout(() => btn.innerHTML = origText, 1000);
+        };
+
+        window.deleteCurrentParty = () => {
+            if(!currentSelection) return alert("SELECT PARTY FIRST");
+            
+            let hasEntry = false;
+            if(window.dbState.matches) {
+                window.dbState.matches.forEach(m => {
+                    if(m.bets?.some(b => b.party === currentSelection)) hasEntry = true;
+                    if(m.sessions?.some(s => s.party === currentSelection)) hasEntry = true;
+                });
+            }
+            if(hasEntry) return alert("CANNOT DELETE: Party has active match entries.");
+
+            if(confirm(`DELETE ${currentSelection}?`)) {
+                window.dbState.parties = window.dbState.parties.filter(x => x.name !== currentSelection);
+                window.saveToCloud();
+                resetForm();
+            }
+        };
+    </script>
+</body>
+</html>
